@@ -1,0 +1,635 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   SARATRASAA — Design Tokens (from brief §2.2)
+   Energik, hangat, modern, milik komunitas relawan muda.
+   ============================================================ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-bricolage);
+  --font-mono: var(--font-jetbrains);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Saratrasaa brand tokens */
+  --color-bg: var(--bg);
+  --color-pink-primary: var(--pink-primary);
+  --color-pink-soft: var(--pink-soft);
+  --color-ink: var(--ink);
+  --color-amber: var(--amber);
+  --color-success: var(--success);
+  --color-pending: var(--pending);
+  --color-rejected: var(--rejected);
+}
+
+:root {
+  --radius: 0.875rem; /* 14px — rounded corners sedang */
+
+  /* Saratrasaa palette */
+  --bg: #FFF6F2;            /* blush white — dasar halaman */
+  --pink-primary: #FF2D78;  /* hot pink — signature */
+  --pink-soft: #FFD6E5;     /* blush lembut */
+  --ink: #1F1115;           /* near-black hangat */
+  --amber: #FFB100;         /* amber — urgensi */
+  --success: #1F8A5F;       /* hijau — verified */
+  --pending: #B0793A;       /* amber gelap — pending */
+  --rejected: #C23B3B;      /* merah redup — rejected */
+
+  /* shadcn mapping */
+  --background: #FFF6F2;
+  --foreground: #1F1115;
+  --card: #FFFFFF;
+  --card-foreground: #1F1115;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F1115;
+  --primary: #FF2D78;
+  --primary-foreground: #FFFFFF;
+  --secondary: #FFD6E5;
+  --secondary-foreground: #1F1115;
+  --muted: #FBEEE8;
+  --muted-foreground: #6B4A52;
+  --accent: #FFD6E5;
+  --accent-foreground: #1F1115;
+  --destructive: #C23B3B;
+  --border: #F3D9DE;
+  --input: #F3D9DE;
+  --ring: #FF2D78;
+  --chart-1: #FF2D78;
+  --chart-2: #FFB100;
+  --chart-3: #1F8A5F;
+  --chart-4: #B0793A;
+  --chart-5: #C23B3B;
+  --sidebar: #FFF6F2;
+  --sidebar-foreground: #1F1115;
+  --sidebar-primary: #FF2D78;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #FFD6E5;
+  --sidebar-accent-foreground: #1F1115;
+  --sidebar-border: #F3D9DE;
+  --sidebar-ring: #FF2D78;
+}
+
+.dark {
+  --bg: #1A0F13;
+  --pink-primary: #FF4A8C;
+  --pink-soft: #4A2230;
+  --ink: #FFF6F2;
+  --amber: #FFB100;
+  --success: #2DB37A;
+  --pending: #D49A55;
+  --rejected: #E05858;
+
+  --background: #1A0F13;
+  --foreground: #FFF6F2;
+  --card: #28171C;
+  --card-foreground: #FFF6F2;
+  --popover: #28171C;
+  --popover-foreground: #FFF6F2;
+  --primary: #FF4A8C;
+  --primary-foreground: #1A0F13;
+  --secondary: #4A2230;
+  --secondary-foreground: #FFF6F2;
+  --muted: #341F25;
+  --muted-foreground: #C9A6AE;
+  --accent: #4A2230;
+  --accent-foreground: #FFF6F2;
+  --destructive: #E05858;
+  --border: #3D2228;
+  --input: #3D2228;
+  --ring: #FF4A8C;
+  --sidebar: #1A0F13;
+  --sidebar-foreground: #FFF6F2;
+  --sidebar-primary: #FF4A8C;
+  --sidebar-primary-foreground: #1A0F13;
+  --sidebar-accent: #4A2230;
+  --sidebar-accent-foreground: #FFF6F2;
+  --sidebar-border: #3D2228;
+  --sidebar-ring: #FF4A8C;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: var(--font-bricolage), system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  .font-mono, .font-data {
+    font-family: var(--font-jetbrains), ui-monospace, monospace;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+}
+
+/* ============================================================
+   Signature element — Ticket stub (perforated ticket, brief §2.5)
+   ============================================================ */
+.ticket-stub {
+  position: relative;
+  background:
+    radial-gradient(circle at 0 50%, transparent 8px, var(--card) 8px) left center / 16px 16px repeat-y,
+    radial-gradient(circle at 100% 50%, transparent 8px, var(--card) 8px) right center / 16px 16px repeat-y;
+}
+.ticket-perf {
+  border-left: 2px dashed var(--pink-soft);
+  position: relative;
+}
+.ticket-perf::before,
+.ticket-perf::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: var(--background);
+  border-radius: 9999px;
+  left: -10px;
+}
+.ticket-perf::before { top: -10px; }
+.ticket-perf::after { bottom: -10px; }
+
+/* Custom scrollbar for long lists */
+.scroll-soft::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-soft::-webkit-scrollbar-track { background: transparent; }
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: var(--pink-soft);
+  border-radius: 9999px;
+}
+.scroll-soft::-webkit-scrollbar-thumb:hover { background: var(--pink-primary); }
+
+/* Marquee / floating animation for hero blobs */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-18px) rotate(2deg); }
+}
+.animate-float-slow { animation: float-slow 7s ease-in-out infinite; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Shimmer-sweep — used by <ShimmerSkeleton /> (Task 8-B).
+   A diagonal white gradient bar sweeps left→right across a translucent
+   block, giving the impression of active loading rather than a flat pulse.
+   The 1.6s duration matches the `before:animate-[shimmer-sweep_1.6s_infinite]`
+   utility applied in Skeleton.tsx. */
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes shimmer-sweep {
+    0%, 100% { transform: none; }
+  }
+}
+
+/* Pulse for "kuota terbatas" badge */
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 177, 0, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 177, 0, 0); }
+}
+.animate-pulse-amber { animation: pulse-amber 2s ease-in-out infinite; }
+
+/* Subtle pulse for countdown seconds box — a gentle opacity/transform nudge
+   that makes the "live" seconds feel active without being distracting. */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.92; transform: scale(0.98); }
+}
+.animate-pulse-subtle { animation: pulse-subtle 1s ease-in-out infinite; }
+
+/* Gentle ring pulse for countdown card — makes the border glow breathe. */
+@keyframes ring-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 45, 120, 0.08); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 45, 120, 0.04); }
+}
+.animate-ring-pulse { animation: ring-pulse 3s ease-in-out infinite; }
+
+/* Soft ping — a translucent pink halo that scales out + fades, used by the
+   active event node on the TimelineSection to draw the eye to "this is
+   happening now". Slower + softer than Tailwind's animate-ping so it reads
+   as a gentle pulse rather than a notification badge. */
+@keyframes ping-soft {
+  0%   { transform: scale(1); opacity: 0.6; }
+  80%, 100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ============================================================
+   Task 9-B — Hero animated gradient + floating particles
+   ============================================================ */
+
+/* Slowly drifts the hue of a gradient background through the Saratrasaa
+   palette (pink → amber → pink) over 20 seconds. Used as a subtle ambient
+   wash behind the hero — never loud enough to compete with the foreground.
+   Disabled under prefers-reduced-motion (gradient freezes in place). */
+@keyframes hue-shift {
+  0%   { filter: hue-rotate(0deg); }
+  50%  { filter: hue-rotate(15deg); }
+  100% { filter: hue-rotate(0deg); }
+}
+.animate-hue-shift { animation: hue-shift 20s ease-in-out infinite; }
+
+/* Floating particle dot — drifts upward + fades in/out, used by Hero's
+   ambient particle layer. The `--float-distance` and `--float-duration`
+   custom props let each particle get its own travel distance + speed
+   via inline styles, while the keyframe itself is shared. */
+@keyframes particle-float {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  10%  { opacity: var(--particle-opacity, 0.5); }
+  85%  { opacity: var(--particle-opacity, 0.5); }
+  100% { transform: translateY(calc(-1 * var(--float-distance, 80px))) scale(0.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow,
+  .animate-pulse-amber,
+  .animate-pulse-subtle,
+  .animate-ring-pulse,
+  .animate-hue-shift {
+    animation: none;
+  }
+  /* Particles just stay static (subtle dots) instead of drifting. */
+  .animate-particle-float { animation: none; opacity: var(--particle-opacity, 0.4); }
+}
+
+/* ============================================================
+   Task 9-D — Decorative pattern animations
+   ============================================================ */
+
+/* Gentle vertical float — a small up/down drift used by empty-state
+   illustrations (Calendar, Images, MessageCircle icons) to make the
+   "no data yet" placeholder feel alive without being distracting. */
+@keyframes float-vertical {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.animate-float-vertical { animation: float-vertical 4s ease-in-out infinite; }
+
+/* Subtle shake — a 600ms horizontal wiggle used by CekStatus's not-found
+   Search icon to communicate "not quite right, try again". One-shot, not
+   infinite, so it doesn't keep wiggling after the user reads the message. */
+@keyframes shake-subtle {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-4px) rotate(-3deg); }
+  40%      { transform: translateX(4px)  rotate(3deg); }
+  60%      { transform: translateX(-3px) rotate(-2deg); }
+  80%      { transform: translateX(3px)  rotate(2deg); }
+}
+.animate-shake-subtle { animation: shake-subtle 600ms ease-in-out; }
+
+/* Bounce-chevron — a small chevron that bobs up and down to invite the
+   user to scroll. Slower + softer than Tailwind's animate-bounce so it
+   reads as ambient rather than urgent. */
+@keyframes bounce-chevron {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50%      { transform: translateY(6px); opacity: 1; }
+}
+.animate-bounce-chevron { animation: bounce-chevron 1.8s ease-in-out infinite; }
+
+/* Soft pulse ring — used by the HistorySection empty-state icon: a thin
+   pink ring that scales out + fades (one cycle every 2.4s). Reads as a
+   gentle "thinking" or "loading" cue without being a real spinner. */
+@keyframes pulse-ring-soft {
+  0%   { transform: scale(0.9); opacity: 0.45; }
+  70%  { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.animate-pulse-ring-soft { animation: pulse-ring-soft 2.4s ease-out infinite; }
+
+/* Sparkle twinkle — a quick scale+opacity pop used by sparkle decorations
+   in the UpcomingEvents empty state. Staggered via inline animation-delay
+   on each sparkle so they don't all fire at once. */
+@keyframes sparkle-twinkle {
+  0%, 100% { transform: scale(0.6); opacity: 0.2; }
+  50%      { transform: scale(1.15); opacity: 0.85; }
+}
+.animate-sparkle-twinkle { animation: sparkle-twinkle 2.4s ease-in-out infinite; }
+
+/* ============================================================
+   Task 10-A — QR Scanner animations
+   ============================================================ */
+
+/* Scanning line — a horizontal pink bar that moves top-to-bottom across
+   the camera frame, then snaps back. 2s loop, ease-in-out.
+   Disabled under prefers-reduced-motion (the line just sits still). */
+@keyframes qr-scan-line {
+  0%   { transform: translateY(0);    opacity: 0.0; }
+  10%  {                                opacity: 0.9; }
+  50%  { transform: translateY(220px); opacity: 0.9; }
+  90%  {                                opacity: 0.9; }
+  100% { transform: translateY(0);    opacity: 0.0; }
+}
+.animate-qr-scan-line { animation: qr-scan-line 2.2s ease-in-out infinite; }
+
+/* Soft pulsing glow on the scan frame border when scanning is active. */
+@keyframes qr-frame-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 45, 120, 0.45); }
+  50%      { box-shadow: 0 0 0 8px rgba(255, 45, 120, 0); }
+}
+.animate-qr-frame-pulse { animation: qr-frame-pulse 1.8s ease-out infinite; }
+
+/* Result overlay pop — quick scale-in for the green/amber/red result card. */
+@keyframes qr-result-pop {
+  0%   { transform: scale(0.92); opacity: 0; }
+  60%  { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.animate-qr-result-pop { animation: qr-result-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-qr-scan-line,
+  .animate-qr-frame-pulse,
+  .animate-qr-result-pop,
+  .animate-float-vertical,
+  .animate-shake-subtle,
+  .animate-bounce-chevron,
+  .animate-pulse-ring-soft,
+  .animate-sparkle-twinkle {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   Polish 4 — Global UX polish (selection, focus, scroll, card)
+   ============================================================ */
+
+/* Smooth scrolling for in-page anchors (#history, #profil, …).
+   Disabled under prefers-reduced-motion to avoid motion sickness. */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Pink text selection — replaces the browser's default blue highlight
+   with Saratrasaa's blush pink + warm ink text. */
+::selection {
+  background: var(--pink-soft);
+  color: var(--ink);
+}
+
+/* Consistent pink focus ring for keyboard users. Applies only on
+   keyboard focus (focus-visible) so mouse clicks don't show a ring. */
+*:focus-visible {
+  outline: 2px solid var(--pink-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Reusable card-hover utility — applies a subtle lift + shadow on hover.
+   Use on cards that don't already have bespoke hover effects. */
+.card-hover {
+  transition: transform 300ms ease, box-shadow 300ms ease;
+}
+.card-hover:hover {
+  box-shadow: 0 10px 25px -5px rgba(31, 17, 21, 0.10),
+              0 8px 10px -6px rgba(31, 17, 21, 0.08);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-hover {
+    transition: none;
+  }
+  .card-hover:hover {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Polish 5 — Micro-interactions (Task 11b)
+   ============================================================ */
+
+/* Button "press" micro-interaction: any primary CTA button (those carrying
+   the standalone `bg-primary` token, e.g. Hero "Daftar Sekarang", DaftarWizard
+   "Cek Status Pembayaran", CekStatus "Cek Status", EventDetailModal "Daftar
+   Sekarang") gets a subtle scale-down on :active, giving tactile feedback
+   without needing to edit each button.
+
+   We use the whitespace-token selector `[class~="bg-primary"]` (matches the
+   whole class token) rather than the substring `[class*="bg-primary"]` so we
+   don't accidentally hit unrelated tokens like `bg-primary-foreground` or
+   `data-[state=checked]:bg-primary`. Disabled buttons are excluded. */
+button[class~="bg-primary"]:not(:disabled) {
+  transition: transform 100ms ease, background-color 150ms ease;
+}
+button[class~="bg-primary"]:not(:disabled):active {
+  transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  button[class~="bg-primary"]:not(:disabled):active {
+    transform: none;
+  }
+}
+
+/* Subtle backdrop blur on the Sheet overlay (mobile nav + any other Sheet).
+   The shadcn Sheet hardcodes the overlay background; we add a soft blur here
+   so the page behind the mobile nav feels slightly out of focus — a small
+   depth cue without changing the existing fade animation. */
+[data-slot="sheet-overlay"] {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sheet-overlay"] {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Hide scrollbar while keeping scroll functionality — used for horizontal
+   carousels on mobile (e.g. TestimonialSection "Kata Relawan"). */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   Task 8-B — Skeleton + micro-interaction utilities
+   ============================================================ */
+
+/* Button press micro-interaction — apply `.btn-press` to any clickable
+   element (Button, link styled as button, icon-button) for a subtle
+   scale-down on :active. The 95% scale + 150ms transition gives tactile
+   feedback without being heavy-handed. Disabled under reduced-motion. */
+.btn-press {
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+.btn-press:active {
+  transform: scale(0.95);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-press {
+    transition: none;
+  }
+  .btn-press:active {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Task 8-D — Print styles for RecapModal
+   ============================================================
+   When the user clicks "Cetak / Simpan PDF" inside the RecapModal,
+   window.print() is called. We hide everything on the page except the
+   `.recap-print-area` (the modal panel) and reposition it to the top-left
+   of the print page so the printed PDF is a clean, full-width document
+   with no admin chrome (navbar, footer, dialog backdrop, action buttons).
+
+   `.no-print` is the opt-out class for any element that should NOT appear
+   in the printed output — used on the action bar (Cetak / Tutup buttons),
+   the dialog backdrop, and the clickable <a> version of the documentation
+   photos (we render a static <img> version for print instead).
+*/
+@media print {
+  /* Hide everything on the page. */
+  body * {
+    visibility: hidden;
+  }
+  /* But make the recap-print-area and all its descendants visible. */
+  .recap-print-area,
+  .recap-print-area * {
+    visibility: visible;
+  }
+  /* Reposition the recap-print-area to the top-left of the print page,
+     full width, no max-height/overflow constraints so the entire recap
+     content (which may be taller than the viewport) prints cleanly. */
+  .recap-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  /* The `print:` Tailwind variant toggles `display: grid` for the static
+     <img> documentation photo grid inside RecapContent. Without this rule,
+     that grid stays `hidden` even in print because the base class is
+     `hidden print:grid`. Tailwind already emits the print variant, so this
+     is just a safety net for any browser that doesn't pick it up. */
+  .recap-print-area .print\:grid {
+    display: grid !important;
+  }
+  /* Hard opt-out: anything tagged .no-print is removed from the print
+     layout entirely (display:none, not just visibility:hidden). */
+  .no-print {
+    display: none !important;
+  }
+  /* Force background colors to print — by default browsers strip
+     backgrounds to save ink. We want the Saratrasaa pink accents (stat
+     card icon chips, recap text box, table header row) to appear in the
+     PDF, so we explicitly enable color-adjust on the recap-print-area. */
+  .recap-print-area,
+  .recap-print-area * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Avoid breaking a stat card / table row across two pages. */
+  .recap-print-area .rounded-xl,
+  .recap-print-area table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* The recap table header should repeat on each printed page. */
+  .recap-print-area thead {
+    display: table-header-group;
+  }
+}
+
+/* ============================================================
+   Task 10-C — Reminder + Polish animations
+   ============================================================ */
+
+/* Crown bob — a gentle up/down float applied to the #1 podium's crown in the
+   LeaderboardSection. 2.6s loop, ease-in-out, ±4px translation. Feels like
+   the crown is hovering with pride. Disabled under prefers-reduced-motion. */
+@keyframes crown-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50%      { transform: translateY(-4px) rotate(2deg); }
+}
+.animate-crown-bob { animation: crown-bob 2.6s ease-in-out infinite; transform-origin: center; }
+
+/* Sparkle drift — a soft twinkle used by decorative sparkles around the
+   leaderboard's top 3. Combines scale + opacity for a "stars are appearing"
+   feel. Staggered via inline animation-delay on each sparkle. */
+@keyframes sparkle-twinkle-soft {
+  0%, 100% { transform: scale(0.5) rotate(0deg); opacity: 0.15; }
+  50%      { transform: scale(1) rotate(45deg); opacity: 0.85; }
+}
+.animate-sparkle-twinkle-soft { animation: sparkle-twinkle-soft 3s ease-in-out infinite; transform-origin: center; }
+
+/* Timeline "today" indicator — a small pulsing dot that slides along the
+   timeline rail to show where today sits relative to the events. The pulse
+   is a gentle two-stage ring expansion. */
+@keyframes today-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 45, 120, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 45, 120, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 45, 120, 0); }
+}
+.animate-today-pulse { animation: today-pulse 2s ease-out infinite; }
+
+/* Quick-actions FAB hover lift — a tiny extra bounce on hover so the
+   button feels inviting. */
+@keyframes fab-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+.animate-fab-float { animation: fab-float 3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-crown-bob,
+  .animate-sparkle-twinkle-soft,
+  .animate-today-pulse,
+  .animate-fab-float {
+    animation: none;
+  }
+}

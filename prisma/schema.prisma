@@ -1,0 +1,112 @@
+// Saratrasaa — Volunteer event registration schema
+// Adapted from the brief (originally Google Sheets) to Prisma + SQLite.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  judul       String
+  deskripsi   String
+  tanggal     String   // ISO date string (YYYY-MM-DD) — SQLite friendly
+  lokasi      String
+  fotoCover   String?  // relative path /uploads/...
+  harga       Int      // Rupiah per orang
+  kuotaMax    Int
+  status      String   @default("upcoming") // upcoming | active | closed
+  fotoDok     String?  // comma-separated relative paths
+  recap       String?
+  linkGrupWa  String?  // WhatsApp group link for registered participants
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pendaftar Pendaftar[]
+  checkIns  CheckIn[]
+
+  @@index([status])
+}
+
+model Pendaftar {
+  kodeReferensi String   @id // SRT-XXXXXX
+  idEvent       String
+  nama          String   // primary contact name (first peserta's namaLengkap)
+  kontak        String   // primary contact WA (first peserta's nomorWa)
+  jumlahOrang   Int
+  hargaDasar    Int      // snapshot: jumlah_orang * harga_per_orang
+  kodeUnik      Int      // 1–999
+  totalBayar    Int      // harga_dasar + kode_unik
+  buktiTransfer String?  // relative path /uploads/...
+  status        String   @default("pending_payment") // pending_payment | verified | rejected
+  catatanAdmin  String?  // optional admin note (e.g. reject reason)
+  createdAt     DateTime @default(now())
+  verifiedAt    DateTime?
+
+  event    Event     @relation(fields: [idEvent], references: [id], onDelete: Cascade)
+  checkIns CheckIn[]
+  peserta  Peserta[]
+
+  @@index([idEvent])
+  @@index([status])
+  @@index([kontak])
+  @@index([totalBayar])
+}
+
+/// Individual participant data within a Pendaftar registration.
+/// Each Pendaftar can have 1–5 Peserta records (one per person).
+/// This ensures every person's data is captured, not just a representative.
+model Peserta {
+  id            String   @id @default(cuid())
+  kodeReferensi String   // links to Pendaftar
+  urutan        Int      // 1-based index within the registration
+  namaLengkap   String
+  namaPanggilan String
+  instagram     String?  // optional, without @ prefix
+  nomorWa       String   // WhatsApp number
+  createdAt     DateTime @default(now())
+
+  pendaftar Pendaftar @relation(fields: [kodeReferensi], references: [kodeReferensi], onDelete: Cascade)
+
+  @@index([kodeReferensi])
+  @@index([nomorWa])
+}
+
+/// Check-in log recorded by admins scanning ticket QR codes at event entry.
+/// A pendaftar can have multiple check-ins across time (we keep history),
+/// but the admin UI surfaces the most recent one for the "alreadyCheckedIn" flag.
+model CheckIn {
+  id            String   @id @default(cuid())
+  kodeReferensi String
+  idEvent       String
+  checkedInAt   DateTime @default(now())
+
+  pendaftar Pendaftar @relation(fields: [kodeReferensi], references: [kodeReferensi], onDelete: Cascade)
+  event     Event     @relation(fields: [idEvent], references: [id], onDelete: Cascade)
+
+  @@index([kodeReferensi])
+  @@index([idEvent])
+  @@index([checkedInAt])
+}
+
+/// Audit log of webhook deliveries from the third-party mutation service.
+/// Useful for debugging duplicate/failed verifications.
+model WebhookLog {
+  id           Int      @id @default(autoincrement())
+  receivedAt   DateTime @default(now())
+  ip           String?
+  amount       Int?
+  signatureOk  Boolean  @default(false)
+  ipOk         Boolean  @default(true)
+  matchedKode  String?  // kodeReferensi if a pending pendaftar was verified
+  reason       String?  // e.g. "no_match", "bad_signature", "verified"
+  rawPayload   String?
+
+  @@index([receivedAt])
+  @@index([matchedKode])
+}
