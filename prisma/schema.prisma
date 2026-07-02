@@ -23,6 +23,7 @@ model Event {
   harga       Int      // Rupiah per orang
   kuotaMax    Int
   status      String   @default("upcoming") // upcoming | active | closed
+  urutan      Int      @default(0)
   fotoDok     String?  // comma-separated relative paths
   recap       String?
   linkGrupWa  String?  // WhatsApp group link for registered participants

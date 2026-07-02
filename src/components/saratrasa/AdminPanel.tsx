@@ -69,6 +69,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 import {
@@ -909,11 +911,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
 
   /** Derived: are all visible (filterable) rows selected? "indeterminate" if some. */
   const allVisibleSelected =
-    paginatedPendaftar.length > 0 &&
-    paginatedPendaftar.every((p) => selectedKodes.has(p.kodeReferensi));
+    filteredPendaftar.length > 0 &&
+    filteredPendaftar.every((p) => selectedKodes.has(p.kodeReferensi));
   const someVisibleSelected =
     !allVisibleSelected &&
-    paginatedPendaftar.some((p) => selectedKodes.has(p.kodeReferensi));
+    filteredPendaftar.some((p) => selectedKodes.has(p.kodeReferensi));
 
   /** Of the selected kodes, how many are *eligible* for bulk action (pending). */
   const selectedPendingCount = React.useMemo(() => {
@@ -940,10 +942,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     setSelectedKodes((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        // Deselect all currently-visible rows (leave hidden ones alone).
-        for (const p of paginatedPendaftar) next.delete(p.kodeReferensi);
+        // Deselect all filtered rows
+        for (const p of filteredPendaftar) next.delete(p.kodeReferensi);
       } else {
-        for (const p of paginatedPendaftar) next.add(p.kodeReferensi);
+        // Select all filtered rows
+        for (const p of filteredPendaftar) next.add(p.kodeReferensi);
       }
       return next;
     });
@@ -1071,6 +1074,41 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       setEventsLoading(false);
     }
   }, [token]);
+
+  async function moveEvent(index: number, direction: "up" | "down") {
+    if (direction === "up" && index === 0) return;
+    if (direction === "down" && index === events.length - 1) return;
+
+    const newEvents = [...events];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    
+    const temp = newEvents[index];
+    newEvents[index] = newEvents[targetIndex];
+    newEvents[targetIndex] = temp;
+
+    setEvents(newEvents);
+
+    try {
+      const res = await fetch("/api/admin/event/reorder", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderedIds: newEvents.map((e) => e.id),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menyimpan urutan");
+      }
+      toast.success("Urutan event diperbarui");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan urutan");
+      fetchEvents(); 
+    }
+  }
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -2856,7 +2894,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {events.map((ev) => (
+                            {events.map((ev, i) => (
                               <TableRow key={ev.id}>
                                 <TableCell className="font-medium max-w-[220px] truncate">
                                   {ev.judul}
@@ -2867,7 +2905,27 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                                 <TableCell className="font-data">{ev.kuotaMax}</TableCell>
                                 <TableCell className="font-data">{ev.tanggal}</TableCell>
                                 <TableCell className="text-right">
-                                  <div className="inline-flex items-center gap-1.5">
+                                  <div className="inline-flex items-center gap-1.5 justify-end">
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="size-8"
+                                      onClick={() => moveEvent(i, "up")}
+                                      disabled={i === 0}
+                                      title="Pindah Ke Atas"
+                                    >
+                                      <ArrowUp className="size-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="size-8"
+                                      onClick={() => moveEvent(i, "down")}
+                                      disabled={i === events.length - 1}
+                                      title="Pindah Ke Bawah"
+                                    >
+                                      <ArrowDown className="size-3.5" />
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -3335,7 +3393,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                                 aria-label={
                                   allVisibleSelected
                                     ? "Batal pilih semua"
-                                    : "Pilih semua pendaftar terlihat"
+                                    : "Pilih semua pendaftar"
                                 }
                                 checked={
                                   allVisibleSelected

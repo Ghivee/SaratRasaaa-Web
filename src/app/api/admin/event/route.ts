@@ -81,7 +81,10 @@ export async function GET(req: NextRequest) {
   if (fail) return fail;
 
   const events = await db.event.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [
+      { urutan: "asc" },
+      { createdAt: "desc" }
+    ],
   });
   return NextResponse.json({ events });
 }
