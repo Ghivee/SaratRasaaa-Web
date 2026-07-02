@@ -212,7 +212,6 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
   const [result, setResult] = React.useState<ScanResult | null>(null);
   const [processing, setProcessing] = React.useState(false);
   const [manualKode, setManualKode] = React.useState("");
-  const [showManual, setShowManual] = React.useState(false);
   const [supportsCamera, setSupportsCamera] = React.useState<boolean | null>(
     null,
   );
@@ -224,9 +223,6 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
       navigator.mediaDevices && navigator.mediaDevices.getUserMedia
     );
     setSupportsCamera(hasGetUserMedia);
-    if (!hasGetUserMedia) {
-      setShowManual(true);
-    }
   }, []);
 
   // Cleanup camera on unmount.
@@ -496,7 +492,6 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
       } else {
         setState({ kind: "error", message: msg });
       }
-      setShowManual(true);
     }
   }, [state.kind, performCheckIn]);
 
@@ -598,30 +593,7 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
             </div>
           )}
 
-          {/* Scanning frame overlay — only shown while live. */}
-          {isLive && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div
-                className={cn(
-                  "relative h-[70%] w-[70%] max-w-[320px] max-h-[320px] rounded-xl border-2 border-pink-primary/80",
-                  state.kind === "scanning" && "animate-qr-frame-pulse",
-                )}
-              >
-                {/* Corner brackets */}
-                <span className="absolute -top-1 -left-1 size-5 border-t-4 border-l-4 border-pink-primary rounded-tl-md" />
-                <span className="absolute -top-1 -right-1 size-5 border-t-4 border-r-4 border-pink-primary rounded-tr-md" />
-                <span className="absolute -bottom-1 -left-1 size-5 border-b-4 border-l-4 border-pink-primary rounded-bl-md" />
-                <span className="absolute -bottom-1 -right-1 size-5 border-b-4 border-r-4 border-pink-primary rounded-br-md" />
 
-                {/* Scan line — animated up/down. */}
-                {state.kind === "scanning" && (
-                  <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-gradient-to-r from-transparent via-pink-primary to-transparent animate-qr-scan-line">
-                    <div className="h-full w-full bg-pink-primary shadow-[0_0_8px_2px_rgba(255,45,120,0.6)]" />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Starting spinner */}
           {state.kind === "starting" && (
@@ -696,14 +668,6 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
           </Button>
         )}
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setShowManual((s) => !s)}
-        >
-          <Keyboard className="size-4" />
-          {showManual ? "Sembunyikan Manual" : "Input Manual"}
-        </Button>
 
         {result && (
           <Button
@@ -719,7 +683,6 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
       </div>
 
       {/* ----------------------- Manual entry ----------------------- */}
-      {showManual && (
         <form
           onSubmit={handleManualSubmit}
           className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-2"
@@ -758,20 +721,18 @@ export function QRScanner({ token, onCheckIn }: QRScannerProps) {
             referensi (SRT-XXXXXX) atau seluruh payload QR.
           </p>
         </form>
-      )}
 
       {/* ----------------------- Result card ----------------------- */}
       {result && <ResultCard result={result} />}
 
       {/* ----------------------- Camera not supported hint ----------------------- */}
-      {supportsCamera === false && !showManual && (
+      {supportsCamera === false && (
         <div className="flex items-start gap-2 rounded-lg bg-amber/10 border border-amber/30 p-3 text-sm">
           <AlertCircle className="size-4 text-amber shrink-0 mt-0.5" />
           <div>
             <p className="font-medium text-ink">Kamera tidak didukung</p>
             <p className="text-muted-foreground">
-              Browser ini tidak mendukung akses kamera. Gunakan tombol
-              &quot;Input Manual&quot; di atas untuk mengetik kode tiket.
+              Browser ini tidak mendukung akses kamera. Gunakan input manual di atas untuk mengetik kode tiket.
             </p>
           </div>
         </div>

@@ -124,6 +124,7 @@ export async function POST(req: NextRequest) {
               judul: true,
               tanggal: true,
               lokasi: true,
+              status: true,
             },
           },
         },
@@ -136,28 +137,49 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (pendaftar.event.status === "closed") {
+        return NextResponse.json(
+          { ok: false, error: `Event "${pendaftar.event.judul}" sudah ditutup. Scan ditolak.` },
+          { status: 400 },
+        );
+      }
+
+      // ----- Check for prior check-ins (to prevent duplicates) -----
+      const existingCheckIn = await db.checkIn.findFirst({
+        where: { kodeReferensi: pendaftar.kodeReferensi },
+        orderBy: { checkedInAt: "desc" },
+      });
+
+      if (existingCheckIn) {
+        // Tiket sudah pernah di-scan. Kita kembalikan status sukses tapi dengan
+        // flag alreadyCheckedIn agar UI memunculkan peringatan kuning, dan
+        // yang paling penting: KITA TIDAK MENAMBAH RECORD BARU (mencegah dobel).
+        return NextResponse.json({
+          ok: true,
+          pendaftar: {
+            kodeReferensi: pendaftar.kodeReferensi,
+            nama: pendaftar.nama,
+            jumlahOrang: pendaftar.jumlahOrang,
+            status: pendaftar.status,
+            event: {
+              judul: pendaftar.event.judul,
+              tanggal: pendaftar.event.tanggal,
+              lokasi: pendaftar.event.lokasi,
+            },
+          },
+          alreadyCheckedIn: true,
+          lastCheckedInAt: existingCheckIn.checkedInAt.toISOString(),
+        });
+      }
+
       // ----- Record the check-in -----
-      // We log the check-in regardless of status so the admin has a full
-      // audit trail. Even rejected tickets get a row (admin scanned them
-      // at the gate — that's still a check-in attempt).
+      // We log the check-in only if it's their first time to avoid duplicates.
       await db.checkIn.create({
         data: {
           kodeReferensi: pendaftar.kodeReferensi,
           idEvent: pendaftar.idEvent,
         },
       });
-
-      // ----- Check for prior check-ins (alreadyCheckedIn flag) -----
-      // We count CheckIn rows created BEFORE the one we just inserted.
-      // A simple way: fetch the latest 2 CheckIns for this kode and check
-      // if there are >= 2 (the one we just created + at least one prior).
-      const recentCheckIns = await db.checkIn.findMany({
-        where: { kodeReferensi: pendaftar.kodeReferensi },
-        orderBy: { checkedInAt: "desc" },
-        take: 2,
-        select: { checkedInAt: true },
-      });
-      const alreadyCheckedIn = recentCheckIns.length >= 2;
 
       return NextResponse.json({
         ok: true,
@@ -172,9 +194,8 @@ export async function POST(req: NextRequest) {
             lokasi: pendaftar.event.lokasi,
           },
         },
-        alreadyCheckedIn,
-        lastCheckedInAt:
-          recentCheckIns[0]?.checkedInAt.toISOString() ?? null,
+        alreadyCheckedIn: false,
+        lastCheckedInAt: null,
       });
     } finally {
       release();
@@ -185,5 +206,33 @@ export async function POST(req: NextRequest) {
       { ok: false, error: "Terjadi kesalahan di server." },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * DELETE /api/admin/check-in?id=<uuid>
+ *   headers: X-Admin-Token: <token>
+ */
+export async function DELETE(req: NextRequest) {
+  const tokenOk = verifyAdminToken(req.headers.get("x-admin-token"));
+  if (!tokenOk) {
+    return NextResponse.json({ error: "Token admin tidak valid." }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "ID check-in tidak valid." }, { status: 400 });
+  }
+
+  try {
+    await db.checkIn.delete({
+      where: { id },
+    });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[api/admin/check-in DELETE]", err);
+    return NextResponse.json({ error: "Gagal menghapus data check-in." }, { status: 500 });
   }
 }

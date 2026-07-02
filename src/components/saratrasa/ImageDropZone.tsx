@@ -53,7 +53,7 @@ interface ImageDropZoneProps {
 }
 
 const DEFAULT_ACCEPT = "image/jpeg,image/png,application/pdf";
-const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Build a friendly short label like "JPG/PNG/PDF" from an accept string. */
 function friendlyAcceptLabel(accept: string): string {

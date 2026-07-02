@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       try {
         const existing = await db.pendaftar.findUnique({
           where: { kodeReferensi: kode },
-          select: { kodeReferensi: true, status: true },
+          select: { kodeReferensi: true, status: true, totalBayar: true, idEvent: true },
         });
 
         if (!existing) {
@@ -128,6 +128,23 @@ export async function POST(req: NextRequest) {
           where: { kodeReferensi: kode },
           data: updateData,
         });
+
+        if (action === "verify") {
+          try {
+            await db.keuangan.create({
+              data: {
+                tipe: "IN",
+                nominal: existing.totalBayar,
+                kategori: "Tiket",
+                keterangan: `Pembayaran Tiket: ${existing.kodeReferensi}`,
+                idEvent: existing.idEvent,
+                tanggal: new Date().toISOString(),
+              }
+            });
+          } catch (e) {
+            console.error("[bulk] failed to record keuangan", e);
+          }
+        }
 
         updated += 1;
       } finally {

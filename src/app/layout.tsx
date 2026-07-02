@@ -30,9 +30,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Saratrasaa — Komunitas Volunteer",
-  description:
-    "Saratrasaa adalah komunitas volunteer muda yang menggerakkan kebaikan lewat event-event kepedulian. Daftar, bayar via QRIS, dapat tiket QR digital.",
+  title: "SaratRasaaa",
+  description: "Platform kegiatan sosial dan kerelawanan.",
   keywords: [
     "Saratrasaa",
     "volunteer",
@@ -55,10 +54,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/saratrasa.png", type: "image/png" },
     ],
-    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [
+      { url: "/saratrasa.png", type: "image/png" }
+    ]
   },
   openGraph: {
     title: "Saratrasaa — Komunitas Volunteer",
@@ -85,6 +85,8 @@ export const viewport: Viewport = {
   themeColor: "#FF2D78",
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -100,7 +102,7 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
-        <SonnerToaster position="top-center" richColors closeButton />
+        <SonnerToaster position="top-center" richColors closeButton visibleToasts={1} duration={3000} />
         <ServiceWorkerRegister />
       </body>
     </html>

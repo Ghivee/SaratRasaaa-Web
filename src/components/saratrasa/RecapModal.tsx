@@ -29,6 +29,7 @@
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   X,
@@ -269,64 +270,58 @@ export function RecapModal({ eventId, token, onClose }: RecapModalProps) {
   const [data, setData] = React.useState<RecapData | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [mounted, setMounted] = React.useState(false);
 
-  // Re-fetch whenever the opened eventId changes (and reset state on close).
   React.useEffect(() => {
-    if (!open || !eventId || !token) {
-      setData(null);
-      setError(null);
-      return;
-    }
+    setMounted(true);
+  }, []);
+
+  const loadData = React.useCallback(async () => {
+    if (!eventId || !token) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setData(null);
 
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/admin/event/recap?id=${encodeURIComponent(eventId)}`,
-          {
-            method: "GET",
-            headers: {
-              "X-Admin-Token": token,
-            },
-          },
-        );
-        if (cancelled) return;
-        if (res.status === 401) {
-          toast.error("Token admin tidak valid.");
-          onClose();
-          return;
-        }
-        if (res.status === 404) {
-          setError("Event tidak ditemukan.");
-          return;
-        }
-        if (!res.ok) {
-          const body = await res
-            .json()
-            .catch(() => ({ error: "Gagal memuat recap." }));
-          setError(body.error || "Gagal memuat recap.");
-          return;
-        }
-        const json = (await res.json()) as RecapData;
-        if (cancelled) return;
-        setData(json);
-      } catch (err) {
-        if (cancelled) return;
-        setError("Gagal memuat recap: " + (err as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
+    try {
+      const res = await fetch(
+        `/api/admin/event/recap?id=${encodeURIComponent(eventId)}`,
+        { headers: { "X-Admin-Token": token } },
+      );
+      if (cancelled) return;
+      if (res.status === 401) {
+        toast.error("Token admin tidak valid.");
+        onClose();
+        return;
       }
-    })();
+      if (res.status === 404) {
+        setError("Event tidak ditemukan.");
+        return;
+      }
+      if (!res.ok) throw new Error("Gagal memuat recap.");
+      const json = (await res.json()) as RecapData;
+      if (!cancelled) setData(json);
+    } catch (err) {
+      if (!cancelled) setError((err as Error).message || "Gagal memuat recap.");
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [open, eventId, token, onClose]);
+  }, [eventId, token, onClose]);
 
-  // ESC to close (only when not printing). Body scroll lock while open.
+  React.useEffect(() => {
+    if (open) {
+      const cleanup = loadData();
+      return () => {
+        cleanup.then(fn => fn && fn());
+      };
+    } else {
+      setData(null);
+    }
+  }, [open, loadData]);
+
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -341,119 +336,136 @@ export function RecapModal({ eventId, token, onClose }: RecapModalProps) {
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted || !open) return null;
 
   const dicetakPada = formatDicetak();
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Recap Event"
-    >
-      {/* Backdrop — click to close. */}
-      <button
-        type="button"
-        aria-label="Tutup recap"
-        onClick={onClose}
-        className="no-print absolute inset-0 bg-black/50 backdrop-blur-sm"
-      />
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeTitle = data?.event.judul.replace(/[^a-zA-Z0-9-]/g, '-') || "Event";
+    document.title = `Recap-${safeTitle}-${dateStr}`;
+    
+    window.print();
+    
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  };
 
-      {/* Recap panel — also the print area. */}
+  const modalContent = (
+    <div className="print-portal-wrapper">
       <div
-        className={cn(
-          "recap-print-area relative w-full max-w-4xl bg-background rounded-xl shadow-2xl",
-          "max-h-[95vh] overflow-y-auto scroll-soft",
-          "border border-border",
-        )}
+        className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Recap Event"
       >
-        {/* Top action bar — visible on screen, hidden in print. */}
-        <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Printer className="size-4 text-pink-primary shrink-0" />
-            <span className="font-display font-semibold text-sm truncate">
-              Recap Event
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => window.print()}
-              disabled={loading || !!error}
-              className="bg-pink-primary hover:bg-pink-primary/90"
-            >
-              <Printer className="size-4" />
-              Cetak / Simpan PDF
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onClose}
-            >
-              <X className="size-4" />
-              Tutup
-            </Button>
-          </div>
-        </div>
+        {/* Backdrop — click to close. */}
+        <button
+          type="button"
+          aria-label="Tutup recap"
+          onClick={onClose}
+          className="no-print absolute inset-0 bg-black/50 backdrop-blur-sm"
+        />
 
-        {/* Recap body. */}
-        <div className="px-5 sm:px-8 py-6 sm:py-8">
-          {loading ? (
-            <RecapSkeleton />
-          ) : error ? (
-            <div className="text-center py-12 space-y-4">
-              <div className="mx-auto size-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                <X className="size-6 text-destructive" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-display text-lg font-semibold text-ink">
-                  Gagal memuat recap
-                </p>
-                <p className="text-sm text-muted-foreground">{error}</p>
-              </div>
+        {/* Recap panel — also the print area. */}
+        <div
+          className={cn(
+            "recap-print-area relative w-full max-w-4xl bg-background rounded-xl shadow-2xl",
+            "max-h-[95vh] overflow-y-auto scroll-soft",
+            "border border-border",
+          )}
+        >
+          {/* Top action bar — visible on screen, hidden in print. */}
+          <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur px-4 py-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Printer className="size-4 text-pink-primary shrink-0" />
+              <span className="font-display font-semibold text-sm truncate">
+                Recap Event
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
-                onClick={() => {
-                  // Re-trigger the fetch effect by toggling state.
-                  setError(null);
-                  setLoading(true);
-                  // Force the effect to re-run by re-setting the same eventId.
-                  // Easiest: re-fetch inline.
-                  if (!eventId || !token) return;
-                  fetch(
-                    `/api/admin/event/recap?id=${encodeURIComponent(eventId)}`,
-                    { headers: { "X-Admin-Token": token } },
-                  )
-                    .then(async (res) => {
-                      if (!res.ok) throw new Error("Gagal memuat recap.");
-                      return (await res.json()) as RecapData;
-                    })
-                    .then((json) => {
-                      setData(json);
-                      setLoading(false);
-                    })
-                    .catch((err) => {
-                      setError(err.message || "Gagal memuat recap.");
-                      setLoading(false);
-                    });
-                }}
+                onClick={handlePrint}
+                disabled={loading || !!error}
+                className="bg-pink-primary hover:bg-pink-primary/90"
               >
-                <RefreshCw className="size-4" />
-                Coba lagi
+                <Printer className="size-4" />
+                Cetak / Simpan PDF
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onClose}
+              >
+                <X className="size-4" />
+                Tutup
               </Button>
             </div>
-          ) : data ? (
-            <RecapContent data={data} dicetakPada={dicetakPada} />
-          ) : null}
+          </div>
+
+          {/* Recap body. */}
+          <div className="px-5 sm:px-8 py-6 sm:py-8">
+            {loading ? (
+              <ShimmerSkeleton className="h-64 w-full" />
+            ) : error ? (
+              <div className="text-center py-12 space-y-4">
+                <div className="mx-auto size-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <X className="size-6 text-destructive" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-display text-lg font-semibold text-ink">
+                    Gagal memuat recap
+                  </p>
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Re-trigger the fetch effect by toggling state.
+                    setError(null);
+                    setLoading(true);
+                    // Force the effect to re-run by re-setting the same eventId.
+                    // Easiest: re-fetch inline.
+                    if (!eventId || !token) return;
+                    fetch(
+                      `/api/admin/event/recap?id=${encodeURIComponent(eventId)}`,
+                      { headers: { "X-Admin-Token": token } },
+                    )
+                      .then(async (res) => {
+                        if (!res.ok) throw new Error("Gagal memuat recap.");
+                        return (await res.json()) as RecapData;
+                      })
+                      .then((json) => {
+                        setData(json);
+                        setLoading(false);
+                      })
+                      .catch((err) => {
+                        setError(err.message || "Gagal memuat recap.");
+                        setLoading(false);
+                      });
+                  }}
+                >
+                  <RefreshCw className="size-4 mr-2" />
+                  Coba lagi
+                </Button>
+              </div>
+            ) : data ? (
+              <RecapContent data={data} dicetakPada={dicetakPada} />
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 /* -------------------------------------------------------------------------- */

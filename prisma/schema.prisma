@@ -16,7 +16,9 @@ model Event {
   judul       String
   deskripsi   String
   tanggal     String   // ISO date string (YYYY-MM-DD) — SQLite friendly
+  waktuMulai  String?  // HH:MM string for late check-in validation
   lokasi      String
+  linkGmaps   String?  // Google Maps URL
   fotoCover   String?  // relative path /uploads/...
   harga       Int      // Rupiah per orang
   kuotaMax    Int
@@ -29,6 +31,7 @@ model Event {
 
   pendaftar Pendaftar[]
   checkIns  CheckIn[]
+  keuangan  Keuangan[]
 
   @@index([status])
 }
@@ -42,6 +45,8 @@ model Pendaftar {
   hargaDasar    Int      // snapshot: jumlah_orang * harga_per_orang
   kodeUnik      Int      // 1–999
   totalBayar    Int      // harga_dasar + kode_unik
+  trxId         String?  // YoBasePay transaction ID
+  qrImageUrl    String?  // URL gambar QR dari YoBasePay
   buktiTransfer String?  // relative path /uploads/...
   status        String   @default("pending_payment") // pending_payment | verified | rejected
   catatanAdmin  String?  // optional admin note (e.g. reject reason)
@@ -56,6 +61,7 @@ model Pendaftar {
   @@index([status])
   @@index([kontak])
   @@index([totalBayar])
+  @@index([trxId])
 }
 
 /// Individual participant data within a Pendaftar registration.
@@ -67,6 +73,9 @@ model Peserta {
   urutan        Int      // 1-based index within the registration
   namaLengkap   String
   namaPanggilan String
+  umur          Int?
+  alamat        String?
+  fotoDiri      String?  // relative path to selfie
   instagram     String?  // optional, without @ prefix
   nomorWa       String   // WhatsApp number
   createdAt     DateTime @default(now())
@@ -109,4 +118,45 @@ model WebhookLog {
 
   @@index([receivedAt])
   @@index([matchedKode])
+}
+
+/// Temporary storage for WhatsApp OTP verification codes.
+/// Codes are deleted once verified or when expired.
+model OtpVerification {
+  id        String   @id @default(cuid())
+  nomorWa   String
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([nomorWa])
+}
+
+/// Financial records for income and expenses.
+model Keuangan {
+  id         String   @id @default(cuid())
+  idEvent    String?
+  tipe       String   @default("OUT")
+  kategori   String   // e.g., "pemasukan_tiket", "pengeluaran_ops"
+  nominal    Int
+  keterangan String
+  tanggal    DateTime @default(now())
+
+  event      Event?   @relation(fields: [idEvent], references: [id], onDelete: SetNull)
+
+  @@index([idEvent])
+  @@index([kategori])
+  @@index([tanggal])
+}
+
+/// Reviews and Testimonials from users/volunteers.
+model Testimoni {
+  id        String   @id @default(cuid())
+  nama      String
+  peran     String   // e.g. "Relawan", "Peserta", "Sponsor"
+  pesan     String
+  rating    Int      @default(5)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

@@ -13,7 +13,6 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
 import type { ActiveEventSummary, View } from "./types";
 
 interface NavbarProps {
@@ -31,10 +30,11 @@ const NAV_ITEMS: { label: string; value: View }[] = [
 
 function Wordmark() {
   return (
-    <span className="font-display text-xl font-bold tracking-tight text-foreground">
-      <span
-        aria-hidden
-        className="mr-0.5 inline-block size-2 translate-y-[1px] rounded-full bg-primary align-middle"
+    <span className="font-display text-xl font-bold tracking-tight text-foreground flex items-center">
+      <img
+        src="/saratrasa.png"
+        alt="Saratrasaa"
+        className="mr-2 inline-block size-6 rounded-full object-cover"
       />
       Saratrasaa
     </span>
@@ -111,7 +111,6 @@ function HamburgerIcon({ open }: { open: boolean }) {
 }
 
 export function Navbar({ view, onViewChange, activeEvent }: NavbarProps) {
-  const isMobile = useIsMobile();
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const reduceMotion = useReducedMotion();
   const ctaVisible = !!activeEvent && activeEvent.sisaKuota > 0;
@@ -134,32 +133,30 @@ export function Navbar({ view, onViewChange, activeEvent }: NavbarProps) {
         </button>
 
         {/* Desktop nav */}
-        {!isMobile && (
-          <nav className="flex items-center gap-1" aria-label="Navigasi utama">
-            {NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.value}
-                item={item}
-                active={view === item.value}
-                onClick={() => handleNav(item.value)}
-              />
-            ))}
-          </nav>
-        )}
+        <nav className="hidden md:flex items-center gap-1" aria-label="Navigasi utama">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.value}
+              item={item}
+              active={view === item.value}
+              onClick={() => handleNav(item.value)}
+            />
+          ))}
+        </nav>
 
         <div className="flex items-center gap-2">
-          {ctaVisible && !isMobile && (
+          {ctaVisible && (
             <Button
               type="button"
               onClick={() => handleNav("daftar")}
-              className="rounded-full bg-primary px-5 font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+              className="hidden md:inline-flex rounded-full bg-primary px-5 font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
             >
               Daftar Sekarang
             </Button>
           )}
 
           {/* Mobile hamburger */}
-          {isMobile && (
+          <div className="md:hidden">
             <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -238,7 +235,7 @@ export function Navbar({ view, onViewChange, activeEvent }: NavbarProps) {
                 </div>
               </SheetContent>
             </Sheet>
-          )}
+          </div>
         </div>
       </div>
     </header>

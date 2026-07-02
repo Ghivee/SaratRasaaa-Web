@@ -1,5 +1,9 @@
 import { Suspense } from "react";
 import HomeClient from "./home-client";
+import { db } from "@/lib/db";
+import type { ActiveEventSummary } from "@/components/saratrasa/types";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Saratrasaa — single public route (`/`).
@@ -14,7 +18,47 @@ import HomeClient from "./home-client";
  *    via /api/admin/url-check (layer 1: obscurity). Layer 2: operator types the
  *    admin token into the AdminPanel (never hardcoded in the bundle).
  */
-export default function Home() {
+export default async function Home() {
+  const event = await db.event.findFirst({
+    where: { status: "active" },
+  });
+
+  let activeEvent: ActiveEventSummary | null = null;
+  if (event) {
+    const agg = await db.pendaftar.aggregate({
+      _sum: { jumlahOrang: true },
+      where: {
+        idEvent: event.id,
+        status: { in: ["pending_payment", "verified"] },
+      },
+    });
+    const terpakai = agg._sum.jumlahOrang ?? 0;
+    const sisaKuota = Math.max(0, event.kuotaMax - terpakai);
+
+    activeEvent = {
+      id: event.id,
+      judul: event.judul,
+      deskripsi: event.deskripsi,
+      tanggal: event.tanggal,
+      lokasi: event.lokasi,
+      fotoCover: event.fotoCover,
+      harga: event.harga,
+      kuotaMax: event.kuotaMax,
+      terpakai,
+      sisaKuota,
+    };
+  }
+
+  const testimonisRaw = await db.testimoni.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+  
+  const testimonis = testimonisRaw.map(t => ({
+    ...t,
+    createdAt: t.createdAt.toISOString()
+  }));
+
   return (
     <Suspense
       fallback={
@@ -26,7 +70,7 @@ export default function Home() {
         </div>
       }
     >
-      <HomeClient />
+      <HomeClient initialActiveEvent={activeEvent} initialTestimonis={testimonis} />
     </Suspense>
   );
 }

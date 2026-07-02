@@ -6,8 +6,7 @@
  * Event reminder dashboard for admins. Surfaces verified pendaftar whose
  * events are happening within the next 7 days, classified into H-1 / H-3 /
  * H-7 windows. Each row has a "Kirim Pengingat" button that opens a dialog
- * which calls the LLM (z-ai-web-dev-sdk) to compose a friendly Indonesian
- * WhatsApp-style reminder message.
+ * which generates a WhatsApp-style reminder message using a template.
  *
  * Layout:
  *   1. Stats cards (4): Total, H-1, H-3, H-7 — each with its own icon.
@@ -69,7 +68,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ShimmerSkeleton } from "./Skeleton";
+import { NotificationDialog } from "./NotificationDialog";
 
 /* -------------------------------------------------------------------------- */
 /* Types — matches the /api/admin/reminders response shape                     */
@@ -331,357 +332,6 @@ function ReminderTypeBadge({ type }: { type: ReminderType }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Reminder dialog — LLM-generated message                                     */
-/* -------------------------------------------------------------------------- */
-
-interface ReminderDialogProps {
-  reminder: Reminder | null;
-  token: string;
-  onUnauthorized: () => void;
-  onClose: () => void;
-}
-
-function ReminderDialog({
-  reminder,
-  token,
-  onUnauthorized,
-  onClose,
-}: ReminderDialogProps) {
-  const open = reminder !== null;
-
-  const [data, setData] = React.useState<SendResponse | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
-  const [regenNonce, setRegenNonce] = React.useState(0);
-
-  // Reset state + fire the fetch whenever a new reminder is opened or the
-  // regenerate button is pressed.
-  React.useEffect(() => {
-    if (!open || !reminder || !token) {
-      setData(null);
-      setError(null);
-      setCopied(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setData((prev) =>
-      prev?.pendaftar.kodeReferensi === reminder.kodeReferensi ? prev : null,
-    );
-
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/reminders/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Token": token,
-          },
-          body: JSON.stringify({ kodeReferensi: reminder.kodeReferensi }),
-        });
-        if (cancelled) return;
-        if (res.status === 401) {
-          toast.error("Token admin tidak valid.");
-          onUnauthorized();
-          return;
-        }
-        if (res.status === 404) {
-          setError("Pendaftar tidak ditemukan.");
-          return;
-        }
-        if (res.status === 400) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as ErrorResponse;
-          setError(body.error || "Pendaftar belum terverifikasi.");
-          return;
-        }
-        if (res.status === 429) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as ErrorResponse;
-          setError(
-            body.error ||
-              "Terlalu banyak permintaan pesan. Tunggu sebentar lalu coba lagi.",
-          );
-          return;
-        }
-        if (res.status === 502) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as ErrorResponse;
-          setError(
-            body.error ||
-              "Gagal membuat pesan dengan LLM. Coba lagi sebentar.",
-          );
-          return;
-        }
-        if (!res.ok) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as ErrorResponse;
-          setError(body.error || "Gagal membuat pesan.");
-          return;
-        }
-        const json = (await res.json()) as SendResponse;
-        if (cancelled) return;
-        setData(json);
-        setCopied(false);
-      } catch (err) {
-        if (cancelled) return;
-        setError("Gagal membuat pesan: " + (err as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, reminder, token, regenNonce, onUnauthorized]);
-
-  async function handleCopy() {
-    if (!data) return;
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(data.message);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = data.message;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      setCopied(true);
-      toast.success("Pesan disalin ke clipboard.");
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error("Gagal menyalin: " + (err as Error).message);
-    }
-  }
-
-  function handleOpenWhatsApp() {
-    if (!data) return;
-    const text = encodeURIComponent(data.message);
-    const phone = normalizeWaNumber(data.pendaftar.kontak);
-    const url = phone
-      ? `https://wa.me/${phone}?text=${text}`
-      : `https://wa.me/?text=${text}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-
-  function handleRegenerate() {
-    if (!reminder || loading) return;
-    setRegenNonce((n) => n + 1);
-  }
-
-  const waPhone = data ? normalizeWaNumber(data.pendaftar.kontak) : "";
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) onClose();
-      }}
-    >
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-display text-lg flex items-center gap-2">
-            <Bell className="size-5 text-primary" />
-            Pesan Pengingat Event
-          </DialogTitle>
-          <DialogDescription>
-            Dibuat otomatis oleh AI. Periksa isi pesan sebelum dikirim — kamu
-            bisa salin, buka WhatsApp, atau regenerasi.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Pendaftar info summary — always visible (even during loading) */}
-        {reminder ? (
-          <div className="rounded-lg border border-border bg-primary/5 p-3 space-y-1.5 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Nama</span>
-              <span className="font-medium text-right truncate max-w-[60%]">
-                {reminder.nama}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Kode Ref</span>
-              <span className="font-mono text-primary">
-                {reminder.kodeReferensi}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Event</span>
-              <span className="text-right truncate max-w-[60%]">
-                {reminder.eventJudul}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Tanggal</span>
-              <span className="font-data">
-                {formatTanggal(reminder.eventTanggal)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Lokasi</span>
-              <span className="text-right truncate max-w-[60%]">
-                {reminder.eventLokasi}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <span className="text-muted-foreground">Hari menuju event</span>
-              <span className="inline-flex items-center gap-1.5 font-mono font-semibold">
-                <AlarmClock className="size-3.5 text-[var(--amber)]" />
-                H-{reminder.daysUntil}
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Body — loading / error / message bubble */}
-        {loading && !data ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-10">
-            <Loader2 className="size-7 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground text-center">
-              Menyusun pesan pengingat dengan AI…
-              <br />
-              <span className="text-xs">Biasanya 3–8 detik.</span>
-            </p>
-          </div>
-        ) : error ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-destructive text-sm">
-                  Gagal membuat pesan
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">
-                  {error}
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleRegenerate}
-              disabled={loading}
-              className="w-full"
-            >
-              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-              Coba lagi
-            </Button>
-          </div>
-        ) : data ? (
-          <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <MessageCircle className="size-3" />
-              Pratinjau Pesan
-              {loading ? (
-                <Loader2 className="size-3 animate-spin ml-1" />
-              ) : null}
-            </div>
-            {/* WhatsApp-style chat bubble */}
-            <div className="bg-[#dcf8c6] dark:bg-[#0b3d2e] text-foreground rounded-2xl rounded-tl-sm p-3.5 shadow-sm">
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                {data.message}
-              </p>
-              <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10 flex items-center justify-between gap-2">
-                <a
-                  href={data.shareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 min-w-0 truncate"
-                  title={data.shareUrl}
-                >
-                  <ExternalLink className="size-2.5 shrink-0" />
-                  <span className="truncate">{data.shareUrl}</span>
-                </a>
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  {data.message.length} karakter
-                </span>
-              </div>
-            </div>
-            {data.message.length > 500 ? (
-              <p className="text-xs text-[var(--amber)] flex items-center gap-1.5">
-                <AlertTriangle className="size-3 shrink-0" />
-                Pesan melebihi 500 karakter — WhatsApp mungkin memotongnya
-                jika diteruskan sebagai pesan broadcast.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {/* Helper line: shows the wa.me number that will be opened */}
-        {data && waPhone ? (
-          <p className="text-[11px] text-muted-foreground text-center">
-            WhatsApp akan membuka chat ke{" "}
-            <span className="font-mono">{waPhone}</span>
-          </p>
-        ) : null}
-
-        <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleCopy}
-            disabled={!data || loading}
-            className="flex-1 min-w-[120px]"
-          >
-            {copied ? (
-              <>
-                <Check className="size-4 text-[var(--success)]" />
-                Tersalin
-              </>
-            ) : (
-              <>
-                <Copy className="size-4" />
-                Salin
-              </>
-            )}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleOpenWhatsApp}
-            disabled={!data || loading}
-            className="flex-1 min-w-[120px] bg-[#25D366] text-white hover:bg-[#1da851] border-transparent"
-          >
-            <MessageCircle className="size-4" />
-            Buka WhatsApp
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleRegenerate}
-            disabled={loading || !reminder}
-            className="flex-1 min-w-[120px]"
-          >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            Regenerasi
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            className="w-full sm:w-auto"
-          >
-            <X className="size-4" />
-            Tutup
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
 /* Empty state                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -718,9 +368,8 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<"all" | ReminderType>("all");
-  const [activeReminder, setActiveReminder] = React.useState<Reminder | null>(
-    null,
-  );
+  const [notifyKodes, setNotifyKodes] = React.useState<string[] | null>(null);
+  const [selectedKodes, setSelectedKodes] = React.useState<Set<string>>(new Set());
 
   const fetchReminders = React.useCallback(async () => {
     if (!token) return;
@@ -771,12 +420,46 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
   const stats = data?.stats ?? { total: 0, h1: 0, h3: 0, h7: 0 };
   const allReminders = data?.reminders ?? [];
 
-  const filteredReminders =
-    filter === "all"
-      ? allReminders
-      : allReminders.filter((r) => r.reminderType === filter);
-
   const statsLoading = loading && !data;
+
+  const filteredReminders = React.useMemo(() => {
+    if (!data) return [];
+    if (filter === "all") return data.reminders;
+    return data.reminders.filter((r) => r.reminderType === filter);
+  }, [data, filter]);
+
+  const allFilteredSelected =
+    filteredReminders.length > 0 &&
+    filteredReminders.every((r) => selectedKodes.has(r.kodeReferensi));
+
+  function toggleAll() {
+    if (allFilteredSelected) {
+      setSelectedKodes((prev) => {
+        const next = new Set(prev);
+        filteredReminders.forEach((r) => next.delete(r.kodeReferensi));
+        return next;
+      });
+    } else {
+      setSelectedKodes((prev) => {
+        const next = new Set(prev);
+        filteredReminders.forEach((r) => next.add(r.kodeReferensi));
+        return next;
+      });
+    }
+  }
+
+  function toggleRow(kode: string) {
+    setSelectedKodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(kode)) next.delete(kode);
+      else next.add(kode);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedKodes(new Set());
+  }
 
   return (
     <div className="rounded-2xl bg-gradient-to-br from-primary/5 via-background to-[var(--amber)]/5 p-4 sm:p-5 ring-1 ring-primary/10">
@@ -906,10 +589,45 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
       ) : (
         <Card className="overflow-hidden">
           <CardContent className="p-0">
+            {selectedKodes.size > 0 && (
+              <div className="bg-primary/5 border-b border-primary/10 p-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-primary flex items-center gap-2">
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                    {selectedKodes.size}
+                  </span>
+                  pendaftar dipilih
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setNotifyKodes(Array.from(selectedKodes))}
+                    className="text-pink-primary border-pink-primary/40 hover:bg-pink-primary/10"
+                  >
+                    <MessageCircle className="size-3.5" />
+                    Buat Pesan ({selectedKodes.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearSelection}
+                  >
+                    Batal
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="max-h-[28rem] overflow-y-auto">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-card">
                   <TableRow>
+                    <TableHead className="w-[44px] pr-0">
+                      <Checkbox
+                        checked={allFilteredSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Pilih semua pengingat"
+                      />
+                    </TableHead>
                     <TableHead className="w-[7rem]">Kode</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead className="hidden md:table-cell">Event</TableHead>
@@ -924,6 +642,13 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
                       key={r.kodeReferensi}
                       className="hover:bg-secondary/30"
                     >
+                      <TableCell className="pr-0">
+                        <Checkbox
+                          checked={selectedKodes.has(r.kodeReferensi)}
+                          onCheckedChange={() => toggleRow(r.kodeReferensi)}
+                          aria-label={`Pilih pendaftar ${r.kodeReferensi}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-xs text-primary">
                         {r.kodeReferensi}
                       </TableCell>
@@ -971,11 +696,12 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
                       <TableCell className="text-right">
                         <Button
                           size="sm"
-                          onClick={() => setActiveReminder(r)}
-                          className="bg-primary hover:bg-primary/90"
+                          variant="outline"
+                          onClick={() => setNotifyKodes([r.kodeReferensi])}
+                          className="border-primary/40 text-primary hover:bg-primary/10"
                         >
-                          <Sparkles className="size-3.5" />
-                          Kirim Pengingat
+                          <MessageCircle className="size-3.5" />
+                          Buat Pesan
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -987,12 +713,22 @@ export function RemindersTab({ token, onUnauthorized }: RemindersTabProps) {
         </Card>
       )}
 
-      {/* Reminder dialog — opens when a row's "Kirim Pengingat" is clicked */}
-      <ReminderDialog
-        reminder={activeReminder}
+      <NotificationDialog
+        kodes={notifyKodes}
         token={token}
-        onUnauthorized={onUnauthorized}
-        onClose={() => setActiveReminder(null)}
+        onClose={() => setNotifyKodes(null)}
+        title="Pengingat Event"
+        defaultTemplate={`Halo {nama}! 👋
+
+Sekadar mengingatkan, event *{eventJudul}* tinggal sebentar lagi lho! 🎪
+
+📍 Lokasi: {eventLokasi}
+📅 Tanggal: {eventTanggal}
+
+Pastikan kamu sudah menyiapkan tiket QR-mu ya (Kode: *{kodeReferensi}*).
+Cek tiketmu di sini: {shareUrl}
+
+Sampai jumpa! 🌿💚`}
       />
     </div>
   );
@@ -1010,6 +746,7 @@ function RemindersTableSkeleton() {
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
+                <TableHead className="w-[44px] pr-0"></TableHead>
                 <TableHead className="w-[7rem]">Kode</TableHead>
                 <TableHead>Nama</TableHead>
                 <TableHead className="hidden md:table-cell">Event</TableHead>
@@ -1021,6 +758,9 @@ function RemindersTableSkeleton() {
             <TableBody>
               {Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
+                  <TableCell className="pr-0">
+                    <ShimmerSkeleton className="size-4 rounded" />
+                  </TableCell>
                   <TableCell>
                     <ShimmerSkeleton className="h-4 w-20" />
                   </TableCell>

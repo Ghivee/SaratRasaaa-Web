@@ -21,15 +21,15 @@ const VALUES: ValueCard[] = [
   {
     icon: <Heart className="size-6" aria-hidden />,
     title: "Hangat, bukan formal",
-    body: "Relawan datang sebagai diri sendiri. Tidak ada seragam ego, hanya niat yang sama.",
+    body: "Relawan datang sebagai diri sendiri. Tidak ada birokrasi rumit, hanya niat baik yang sama.",
     iconWrap: "bg-secondary text-primary",
     glow: "255, 45, 120", // --pink-primary
     accentColor: "#FF2D78",
   },
   {
     icon: <Leaf className="size-6" aria-hidden />,
-    title: "Aksi nyata, bukan retorika",
-    body: "Setiap event menghasilkan dampak terukur: karung plastik, kantong darah, pohon mangrove.",
+    title: "Aksi nyata, bukan wacana",
+    body: "Setiap kegiatan memberikan dampak langsung: bantuan tersalurkan, senyum anak-anak, dan lingkungan yang lebih bersih.",
     iconWrap: "bg-[var(--success)]/10 text-[var(--success)]",
     glow: "31, 138, 95", // --success
     accentColor: "#1F8A5F",
@@ -37,7 +37,7 @@ const VALUES: ValueCard[] = [
   {
     icon: <Users className="size-6" aria-hidden />,
     title: "Komunitas yang tumbuh",
-    body: "Dari 5 teman jadi ratusan relawan. Setiap orang bawa cerita dan teman baru.",
+    body: "Dari sekelompok teman hingga ratusan relawan. Setiap orang hadir membawa semangat dan relasi baru.",
     iconWrap: "bg-[var(--amber)]/15 text-[var(--amber)]",
     glow: "255, 177, 0", // --amber
     accentColor: "#FFB100",
@@ -106,22 +106,10 @@ export function ProfilSection() {
             </span>
             <div className="space-y-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
               <p>
-                Saratrasaa dimulai dari sekumpulan teman di Bandung yang capeh
-                melihat sampah menumpuk di tepi sungai sambil ngerjain tugas
-                kuliah. Suatu hari mereka putuskan: bukan cuma ngeluh, tapi
-                turun. Undang lima teman, bawa karung, jalan kaki ke Cikapundung.
-                Selesai hari itu, ada tujuh karung plastik dan satu perasaan
-                baru — bahwa kebaikan itu ternyata ringan-ringan aja kalau
-                dikerjakan bareng.
+                Saratrasaa bermula dari sekumpulan pemuda-pemudi di Banjarnegara yang menyadari bahwa kepedulian kecil bisa memberikan dampak besar jika dilakukan bersama-sama. Awalnya hanya berbekal niat baik dan ajakan sederhana kepada teman-teman terdekat untuk turun langsung membantu panti asuhan dan mengedukasi siswa di sekolah-sekolah setempat. Dari langkah kecil itulah, semangat kerelawanan ini terus menyebar.
               </p>
               <p>
-                Misi kami sederhana: bikin jadi relawan itu terasa mudah
-                dijalani, bukan khotbah yang berat. Kita campur aduk event
-                lingkungan (bersih sungai, tanam mangrove, beach cleanup) dan
-                event sosial (donor darah, donor buku, panti asuhan) supaya
-                setiap orang bisa nemuin cara pedulinya sendiri. Tidak ada
-                minimum komitmen, tidak ada seragam kaku. Datang, bawa diri,
-                pulang bawa cerita.
+                Misi kami sederhana: membuat wadah kerelawanan yang inklusif, menyenangkan, dan penuh makna. Kami menyelenggarakan beragam kegiatan mulai dari kunjungan sosial ke panti asuhan, program edukasi ke sekolah, hingga aksi kepedulian lingkungan agar setiap orang dapat menemukan cara berbaginya sendiri. Tidak perlu syarat rumit atau pengalaman khusus. Cukup datang, bawa diri, dan pulang membawa cerita serta teman baru.
               </p>
             </div>
           </div>

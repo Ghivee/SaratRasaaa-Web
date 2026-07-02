@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 import { db } from "@/lib/db";
 import { verifyAdminToken, getClientIp } from "@/lib/security";
 import { rateLimit } from "@/lib/rate-limit";
@@ -7,19 +6,56 @@ import { rateLimit } from "@/lib/rate-limit";
 /**
  * POST /api/admin/reminders/send
  *
- * Generates a friendly Indonesian WhatsApp-style event reminder message for a
- * verified pendaftar whose event is upcoming (within 7 days). Uses the LLM
- * skill (z-ai-web-dev-sdk) to compose the message.
+ * Membuat pesan pengingat event WhatsApp untuk pendaftar yang sudah
+ * terverifikasi dan event-nya akan segera berlangsung (dalam 7 hari).
+ * Pesan dibuat menggunakan template statis dalam Bahasa Indonesia.
  *
  *   body: { kodeReferensi: string }
  *   →  { ok: true, message: string, shareUrl: string }
  *
- * Requires X-Admin-Token header (security fix #2 — never hardcoded in bundle).
- * Rate limited to 10 req/min/IP — LLM calls are expensive.
- *
- * NOTE: z-ai-web-dev-sdk MUST only run server-side. It is imported statically
- * at the top of this file (no `'use client'` here — this is a route handler).
+ * Memerlukan header X-Admin-Token.
+ * Rate limit: 10 req/menit/IP.
  */
+
+function generateReminderMessage(params: {
+  nama: string;
+  eventJudul: string;
+  eventTanggal: string;
+  eventLokasi: string;
+  jumlahOrang: number;
+  kodeReferensi: string;
+  daysUntil: number;
+}): string {
+  const { nama, eventJudul, eventTanggal, eventLokasi, jumlahOrang, kodeReferensi, daysUntil } = params;
+
+  const urgency = daysUntil <= 1
+    ? "🔔 *BESOK!*"
+    : daysUntil <= 3
+      ? `⏰ *${daysUntil} hari lagi!*`
+      : `📅 *${daysUntil} hari lagi*`;
+
+  return [
+    `Halo ${nama}! 👋`,
+    ``,
+    `Jangan lupa ya, event kita ${urgency}`,
+    ``,
+    `🎪 *${eventJudul}*`,
+    `📅 Tanggal: ${eventTanggal}`,
+    `📍 Lokasi: ${eventLokasi}`,
+    `👥 Peserta: ${jumlahOrang} orang`,
+    `🎫 Kode: *${kodeReferensi}*`,
+    ``,
+    `📝 *Tips persiapan:*`,
+    `• Bawa botol minum sendiri 💧`,
+    `• Pakai sunscreen & topi 🧴`,
+    `• Pakai baju yang nyaman & sepatu tertutup 👟`,
+    `• Bawa semangat dan senyuman! 😄`,
+    ``,
+    `Sampai jumpa di lokasi! 🌿💚`,
+    `— Tim Saratrasaa`,
+  ].join("\n");
+}
+
 export async function POST(req: NextRequest) {
   const tokenOk = verifyAdminToken(req.headers.get("x-admin-token"));
   if (!tokenOk) {
@@ -54,7 +90,6 @@ export async function POST(req: NextRequest) {
 
     const kodeReferensi = kodeRaw.trim().toUpperCase();
 
-    // Fetch the pendaftar + its event in a single Prisma call.
     const pendaftar = await db.pendaftar.findUnique({
       where: { kodeReferensi },
       include: {
@@ -87,78 +122,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Compute daysUntil — same logic as the GET /api/admin/reminders endpoint.
+    // Hitung hari menuju event
     const iso = pendaftar.event.tanggal;
     const datePart = iso.length >= 10 ? iso.slice(0, 10) : iso;
     const [y, m, d] = datePart.split("-").map(Number);
-    const eventMs =
-      y && m && d ? Date.UTC(y, m - 1, d) : Number.NaN;
+    const eventMs = y && m && d ? Date.UTC(y, m - 1, d) : Number.NaN;
     const now = Date.now();
     const DAY_MS = 24 * 60 * 60 * 1000;
     const diffMs = Number.isFinite(eventMs) ? eventMs - now : 0;
-    const daysUntil = Math.max(
-      0,
-      Math.ceil(diffMs / DAY_MS),
-    );
+    const daysUntil = Math.max(0, Math.ceil(diffMs / DAY_MS));
 
-    // Build the share URL — points back to the public status-check page so
-    // the relawan can pull up their ticket / QR code quickly.
     const origin = req.nextUrl.origin;
     const shareUrl = `${origin}/?kode=${encodeURIComponent(pendaftar.kodeReferensi)}`;
 
-    // Compose the LLM prompt with the event + pendaftar context.
-    // thinking disabled for speed — this is a short, templated message.
-    let message: string;
-    try {
-      const zai = await ZAI.create();
-      const response = await zai.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content:
-              "Kamu adalah asisten yang menulis pesan pengingat event WhatsApp singkat dan hangat dalam Bahasa Indonesia untuk komunitas relawan Saratrasaa. Pesan maksimal 400 karakter, gunakan emoji secukupnya.",
-          },
-          {
-            role: "user",
-            content: `Buatkan pesan pengingat event untuk:\n\nNama: ${pendaftar.nama}\nEvent: ${pendaftar.event.judul}\nTanggal: ${pendaftar.event.tanggal}\nLokasi: ${pendaftar.event.lokasi}\nJumlah Orang: ${pendaftar.jumlahOrang}\nKode Referensi: ${pendaftar.kodeReferensi}\nHari menuju event: ${daysUntil}\n\nPesan harus berisi:\n- Sapaan ramah\n- Pengingat tanggal + lokasi event\n- Pengingat bawa kode referensi/tiket\n- Tips singkat (bawa botol minum, pakai sunscreen, dll)\n- Penutup hangat`,
-          },
-        ],
-        thinking: { type: "disabled" },
-      });
-
-      const choice = response?.choices?.[0];
-      const content =
-        typeof choice?.message?.content === "string"
-          ? choice.message.content.trim()
-          : "";
-
-      if (!content) {
-        return NextResponse.json(
-          { error: "LLM tidak mengembalikan pesan. Coba lagi." },
-          { status: 502 },
-        );
-      }
-
-      // Hard cap at 800 chars to keep the WhatsApp URL sane even if the model
-      // ignores the 400-char system instruction.
-      message = content.slice(0, 800);
-    } catch (llmErr) {
-      console.error("[api/admin/reminders/send LLM]", llmErr);
-      return NextResponse.json(
-        {
-          error:
-            "Gagal membuat pesan dengan LLM. Periksa konfigurasi .z-ai-config atau coba lagi sebentar.",
-        },
-        { status: 502 },
-      );
-    }
+    const message = generateReminderMessage({
+      nama: pendaftar.nama,
+      eventJudul: pendaftar.event.judul,
+      eventTanggal: pendaftar.event.tanggal,
+      eventLokasi: pendaftar.event.lokasi,
+      jumlahOrang: pendaftar.jumlahOrang,
+      kodeReferensi: pendaftar.kodeReferensi,
+      daysUntil,
+    });
 
     return NextResponse.json({
       ok: true,
       message,
       shareUrl,
-      // Echo the pendaftar + event context so the dialog can render a summary
-      // block (like NotificationDialog does) without a second round-trip.
       pendaftar: {
         kodeReferensi: pendaftar.kodeReferensi,
         nama: pendaftar.nama,

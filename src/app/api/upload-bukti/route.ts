@@ -81,6 +81,13 @@ export async function POST(req: NextRequest) {
     const bytes = Buffer.from(match[2], "base64");
 
     const filename = `bukti-${kodeNorm}-${Date.now()}.${v.ext}`;
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Koneksi penyimpanan file belum dikonfigurasi. Periksa SUPABASE_SERVICE_ROLE_KEY." },
+        { status: 500 },
+      );
+    }
     
     const { data, error } = await supabase.storage
       .from("uploads")

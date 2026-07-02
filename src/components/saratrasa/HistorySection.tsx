@@ -29,18 +29,10 @@ interface HistorySectionProps {
   onDaftarActive?: () => void;
 }
 
-/** Pick cover image: explicit fotoCover > fotoDok[0] > keyword-based default. */
 function pickCover(event: HistoryEvent): string {
   if (event.fotoCover) return event.fotoCover;
   if (event.fotoDok && event.fotoDok.length > 0) return event.fotoDok[0];
-  const j = (event.judul || "").toLowerCase();
-  if (j.includes("sungai") || j.includes("cikapundung")) {
-    return "/history-cikapundung.jpg";
-  }
-  if (j.includes("donor") || j.includes("darah")) {
-    return "/history-donor.jpg";
-  }
-  return "/hero-volunteers.jpg";
+  return "/hero2.jpeg";
 }
 
 function formatTanggal(iso: string): string {
@@ -248,14 +240,6 @@ export function HistorySection({ events, loading, onDaftarActive }: HistorySecti
                       >
                         Selesai
                       </Badge>
-                      {/* "Lihat Cerita" pill — slides up from bottom of image on hover */}
-                      <Badge
-                        aria-hidden
-                        className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 translate-y-8 bg-background/95 px-3 py-1 text-xs font-semibold text-foreground opacity-0 shadow-md transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
-                      >
-                        Lihat Cerita
-                        <ArrowRight className="size-3" aria-hidden />
-                      </Badge>
                     </div>
 
                     <div className="flex flex-col gap-3 p-5">
@@ -267,10 +251,17 @@ export function HistorySection({ events, loading, onDaftarActive }: HistorySecti
                           <Calendar className="size-3.5" aria-hidden />
                           {formatTanggal(event.tanggal)}
                         </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <MapPin className="size-3.5" aria-hidden />
-                          {event.lokasi}
-                        </span>
+                        {event.linkGmaps ? (
+                          <a href={event.linkGmaps} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors hover:underline" onClick={(e) => e.stopPropagation()}>
+                            <MapPin className="size-3.5 shrink-0" aria-hidden />
+                            <span>{event.lokasi}</span>
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <MapPin className="size-3.5 shrink-0" aria-hidden />
+                            <span>{event.lokasi}</span>
+                          </span>
+                        )}
                       </div>
                       {recap && (
                         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -309,10 +300,17 @@ export function HistorySection({ events, loading, onDaftarActive }: HistorySecti
                     <Calendar className="size-3.5" aria-hidden />
                     {formatTanggal(active.tanggal)}
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <MapPin className="size-3.5" aria-hidden />
-                    {active.lokasi}
-                  </span>
+                  {active.linkGmaps ? (
+                    <a href={active.linkGmaps} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors hover:underline">
+                      <MapPin className="size-3.5 shrink-0" aria-hidden />
+                      <span>{active.lokasi}</span>
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin className="size-3.5 shrink-0" aria-hidden />
+                      <span>{active.lokasi}</span>
+                    </span>
+                  )}
                 </DialogDescription>
               </DialogHeader>
 

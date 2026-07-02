@@ -24,7 +24,7 @@
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { History, Loader2, Search, ShieldCheck, Lightbulb } from "lucide-react";
+import { History, Loader2, Search, ShieldCheck, Lightbulb, Camera } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,26 +38,34 @@ import type { PendaftarResult } from "./types";
 import { TicketCard } from "./TicketCard";
 import { TicketSkeleton } from "./Skeleton";
 import { VolunteerHistory } from "./VolunteerHistory";
+import { ImageDropZone } from "./ImageDropZone";
 
 interface CekStatusProps {
   /** Optional initial kode to prefill (e.g. from a URL param). */
   initialKode?: string;
 }
 
-type LookupMode = "kode" | "kombinasi";
+type LookupMode = "kode" | "otp";
 
 export function CekStatus({ initialKode }: CekStatusProps) {
   const [mode, setMode] = React.useState<LookupMode>("kode");
   const [kode, setKode] = React.useState(initialKode ?? "");
   const [kontak, setKontak] = React.useState("");
-  const [namaDepan, setNamaDepan] = React.useState("");
+  const [otpInput, setOtpInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [sendingOtp, setSendingOtp] = React.useState(false);
+  const [otpSent, setOtpSent] = React.useState(false);
   const [result, setResult] = React.useState<PendaftarResult | null>(null);
   const [notFound, setNotFound] = React.useState(false);
-  // Volunteer history dialog (Task 9-A) — opened from the "Lihat Riwayat Saya"
-  // button below the main form. Pre-filled with the current kontak + namaDepan
-  // if the user has typed them on the "kombinasi" tab.
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [resendCooldown, setResendCooldown] = React.useState(0);
+
+  React.useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = window.setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   // Prefill from URL param (or any parent-supplied value).
   React.useEffect(() => {
@@ -76,16 +84,44 @@ export function CekStatus({ initialKode }: CekStatusProps) {
     return k;
   }
 
-  function validateKombinasiMode():
-    | { kontak: string; nama: string }
+  async function handleSendOtp() {
+    if (!kontak.trim()) {
+      toast.error("Masukkan nomor HP terlebih dahulu.");
+      return;
+    }
+    setSendingOtp(true);
+    try {
+      const res = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nomorWa: kontak.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        toast.success(`Kode OTP dikirim ke ${kontak.trim()}`);
+        setOtpSent(true);
+        setResendCooldown(60);
+      } else {
+        toast.error(data?.error || "Gagal mengirim OTP.");
+      }
+    } catch (err) {
+      console.error("[CekStatus] send otp error", err);
+      toast.error("Terjadi kesalahan.");
+    } finally {
+      setSendingOtp(false);
+    }
+  }
+
+  function validateOtpMode():
+    | { kontak: string; otp: string }
     | null {
     const ko = kontak.trim();
-    const na = namaDepan.trim();
-    if (!ko || !na) {
-      toast.error("Nomor HP dan nama depan wajib diisi.");
+    const ot = otpInput.trim();
+    if (!ko || !ot || ot.length !== 6) {
+      toast.error("Nomor HP dan 6 digit OTP wajib diisi.");
       return null;
     }
-    return { kontak: ko, nama: na };
+    return { kontak: ko, otp: ot };
   }
 
   async function handleCek(e: React.FormEvent) {
@@ -104,13 +140,13 @@ export function CekStatus({ initialKode }: CekStatusProps) {
         }
         params.set("kode", k);
       } else {
-        const v = validateKombinasiMode();
+        const v = validateOtpMode();
         if (!v) {
           setLoading(false);
           return;
         }
         params.set("kontak", v.kontak);
-        params.set("nama", v.nama);
+        params.set("otp", v.otp);
       }
 
       const res = await fetch(`/api/cek-status?${params.toString()}`);
@@ -169,7 +205,7 @@ export function CekStatus({ initialKode }: CekStatusProps) {
           Cek Status Pendaftaran
         </h1>
         <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-          Punya kode referensi? Cek di sini. Lupa kode? Masukkan nomor HP + nama depan.
+          Punya kode referensi? Cek di sini. Lupa kode? Masukkan nomor HP + OTP.
         </p>
       </header>
 
@@ -183,9 +219,9 @@ export function CekStatus({ initialKode }: CekStatusProps) {
             <ShieldCheck className="size-3.5" />
             Kode Referensi
           </TabsTrigger>
-          <TabsTrigger value="kombinasi" className="gap-1.5 rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+          <TabsTrigger value="otp" className="gap-1.5 rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
             <Search className="size-3.5" />
-            HP + Nama Depan
+            Lupa Kode
           </TabsTrigger>
         </TabsList>
 
@@ -207,60 +243,122 @@ export function CekStatus({ initialKode }: CekStatusProps) {
             </p>
           </TabsContent>
 
-          <TabsContent value="kombinasi" className="space-y-3">
+          <TabsContent value="otp" className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="kontak" className="text-sm font-medium">Nomor HP</Label>
-              <Input
-                id="kontak"
-                value={kontak}
-                onChange={(e) => setKontak(e.target.value)}
-                placeholder="0812xxxx"
-                inputMode="tel"
-                autoComplete="tel"
-                maxLength={20}
-                className="h-12 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
-              />
+              <Label htmlFor="kontak" className="text-sm font-medium">Nomor WhatsApp</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="kontak"
+                  value={kontak}
+                  onChange={(e) => { setKontak(e.target.value); setOtpSent(false); setOtpInput(""); }}
+                  placeholder="0812xxxx"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={20}
+                  disabled={otpSent}
+                  className="h-12 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
+                />
+                {!otpSent && (
+                  <Button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sendingOtp || kontak.length < 9}
+                    className="h-12 px-6 rounded-xl shrink-0"
+                  >
+                    {sendingOtp ? <Loader2 className="size-4 animate-spin" /> : "Kirim OTP"}
+                  </Button>
+                )}
+                {otpSent && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setOtpSent(false); setOtpInput(""); }}
+                    className="h-12 px-4 rounded-xl shrink-0"
+                  >
+                    Ganti WA
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="namaDepan" className="text-sm font-medium">Nama Depan</Label>
-              <Input
-                id="namaDepan"
-                value={namaDepan}
-                onChange={(e) => setNamaDepan(e.target.value)}
-                placeholder="Nama depan kamu"
-                autoComplete="given-name"
-                maxLength={60}
-                className="h-12 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
-              />
-            </div>
+            
+            {otpSent && (
+              <div className="space-y-1.5">
+                <Label htmlFor="otpInput" className="text-sm font-medium">6-Digit OTP</Label>
+                <Input
+                  id="otpInput"
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="______"
+                  maxLength={6}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-12 text-center text-xl tracking-widest rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
+                  autoFocus
+                />
+              </div>
+            )}
             <p className="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-              Dem keamanan data, pencarian dengan nomor HP wajib diisi nama depan juga.
+              Pastikan nomor WhatsApp Anda aktif untuk menerima OTP.
             </p>
           </TabsContent>
 
-          <Button
-            type="submit"
-            size="lg"
-            disabled={loading}
-            className="btn-press mt-5 w-full rounded-full bg-primary shadow-md hover:bg-primary/90 hover:shadow-lg transition-all h-12"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Mengecek...
-              </>
-            ) : (
-              <>
-                <Search className="size-4" />
-                Cek Status
-              </>
-            )}
-          </Button>
+          {!otpSent || mode === "kode" ? (
+            <Button
+              type="submit"
+              size="lg"
+              disabled={loading || sendingOtp}
+              className="btn-press mt-5 w-full rounded-full bg-primary shadow-md hover:bg-primary/90 hover:shadow-lg transition-all h-12"
+            >
+              {loading || sendingOtp ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {sendingOtp ? "Mengirim OTP..." : "Mencari..."}
+                </>
+              ) : (
+                <>
+                  <Search className="size-4" />
+                  {mode === "kode" ? "Cari Status" : "Kirim Kode OTP"}
+                </>
+              )}
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 mt-5">
+              <Button
+                type="submit"
+                size="lg"
+                disabled={loading || otpInput.length !== 6}
+                className="btn-press w-full rounded-full bg-primary shadow-md hover:bg-primary/90 hover:shadow-lg transition-all h-12"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                    Memverifikasi...
+                  </>
+                ) : (
+                  <>
+                    <Search className="size-4 mr-2" />
+                    Cari Status
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSendOtp}
+                disabled={sendingOtp || resendCooldown > 0}
+                className="w-full rounded-full h-12"
+              >
+                {resendCooldown > 0
+                  ? `Kirim Ulang Kode (${resendCooldown}s)`
+                  : "Kirim Ulang Kode"}
+              </Button>
+            </div>
+          )}
         </form>
       </Tabs>
 
       {/* "Lihat Riwayat Saya" — opens the VolunteerHistory dialog (Task 9-A).
-          Prefilled with whatever kontak + nama depan the user has typed on
+          Prefilled with whatever kontak + nama lengkap the user has typed on
           the "kombinasi" tab, so they don't have to re-type them. */}
       <div className="mt-5 rounded-xl border border-dashed border-secondary bg-secondary/20 p-4 text-center">
         <Button
@@ -281,7 +379,6 @@ export function CekStatus({ initialKode }: CekStatusProps) {
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         initialKontak={kontak}
-        initialNama={namaDepan}
       />
 
       {/* Loading — TicketSkeleton mirrors the verified TicketCard layout so
@@ -316,7 +413,7 @@ export function CekStatus({ initialKode }: CekStatusProps) {
           transition={{ duration: 0.3 }}
           className="mt-6"
         >
-          <ResultView pendaftar={result} />
+          <ResultView pendaftar={result} onReload={handleCek} />
         </motion.div>
       )}
     </section>
@@ -339,7 +436,7 @@ function NotFoundCard({
   //   - Decorative pink blob behind the icon for warmth.
   //   - Two concrete suggestions based on which lookup mode the user was in:
   //     * kode mode      → "Cek kembali 6 karakter setelah SRT-"
-  //     * kombinasi mode → "Pastikan nomor HP aktif + nama depan sesuai KTP"
+  //     * kombinasi mode → "Pastikan nomor HP aktif + nama lengkap sesuai KTP"
   //   - "Coba Lihat Riwayat" CTA → opens the VolunteerHistory dialog so the
   //     user can browse ALL their past registrations (often the real reason
   //     they're searching — they forgot which kode belongs to which event).
@@ -403,11 +500,11 @@ function NotFoundCard({
                 <>
                   <li className="flex items-start gap-1.5">
                     <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary/60" aria-hidden />
-                    Nomor HP harus yang kamu pakai saat daftar (format 08xx atau 62xxx).
+                    Nomor WhatsApp harus yang terdaftar.
                   </li>
                   <li className="flex items-start gap-1.5">
                     <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary/60" aria-hidden />
-                    Nama depan harus persis seperti yang diisi saat daftar.
+                    Pastikan kode OTP benar dan belum kadaluwarsa (berlaku 5 menit).
                   </li>
                 </>
               )}
@@ -431,7 +528,7 @@ function NotFoundCard({
   );
 }
 
-function ResultView({ pendaftar }: { pendaftar: PendaftarResult }) {
+function ResultView({ pendaftar, onReload }: { pendaftar: PendaftarResult; onReload: () => void }) {
   if (pendaftar.status === "verified") {
     return (
       <div className="space-y-5">

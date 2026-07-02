@@ -19,6 +19,15 @@ export interface ActiveEventSummary {
   sisaKuota: number;
 }
 
+export interface Testimoni {
+  id: string;
+  nama: string;
+  peran: string;
+  pesan: string;
+  rating: number;
+  createdAt: string;
+}
+
 /** History event returned by GET /api/event/history */
 export interface HistoryEvent {
   id: string;
@@ -31,6 +40,7 @@ export interface HistoryEvent {
   kuotaMax: number;
   recap: string | null;
   fotoDok: string[];
+  linkGmaps: string | null;
 }
 
 /** Pendaftar + event returned by GET /api/cek-status */
@@ -52,6 +62,11 @@ export interface PendaftarResult {
     tanggal: string;
     lokasi: string;
   };
+  peserta?: {
+    id: string;
+    namaLengkap: string;
+    fotoDiriUrl: string | null;
+  }[];
 }
 
 /** Response from POST /api/daftar */
@@ -65,6 +80,9 @@ export interface DaftarResponse {
   eventTanggal: string;
   eventLokasi: string;
   linkGrupWa: string | null;
+  trxId: string | null;
+  qrImageUrl: string | null;
+  expiredAt: string | null;
 }
 
 /** Event list item for admin */
@@ -73,7 +91,9 @@ export interface AdminEventItem {
   judul: string;
   deskripsi: string;
   tanggal: string;
+  waktuMulai: string | null;
   lokasi: string;
+  linkGmaps: string | null;
   fotoCover: string | null;
   harga: number;
   kuotaMax: number;
@@ -82,4 +102,16 @@ export interface AdminEventItem {
   fotoDok: string[];
   linkGrupWa: string | null;
   createdAt: string;
+}
+
+/** Item returned by GET /api/gallery */
+export interface GalleryItem {
+  id: string;
+  judul: string;
+  tanggal: string; // YYYY-MM-DD
+  lokasi: string;
+  linkGmaps: string | null;
+  recap: string | null;
+  fotoDok: string[];
+  fotoCover: string | null;
 }

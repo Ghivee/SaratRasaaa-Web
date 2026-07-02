@@ -164,14 +164,7 @@ export function Footer({ onNavigate }: FooterProps) {
 
         {/* Bottom bar */}
         <div className="mt-10 flex flex-col items-center gap-4 pt-6 sm:flex-row sm:justify-between">
-          {/* Gradient divider */}
-          <div
-            className="absolute left-0 right-0 h-px"
-            style={{
-              background: "linear-gradient(to right, transparent, var(--pink-primary), var(--amber), var(--success), transparent)",
-            }}
-            aria-hidden
-          />
+          {/* Footer content */}
           <p className="inline-flex items-center gap-1.5 text-xs text-background/70">
             © 2025 Saratrasaa. Dibuat dengan
             <Heart className="size-3 fill-primary text-primary" aria-hidden />

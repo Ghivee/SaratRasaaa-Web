@@ -15,7 +15,9 @@ interface UpcomingEvent {
   judul: string;
   deskripsi: string;
   tanggal: string; // ISO date string
+  waktuMulai: string | null;
   lokasi: string;
+  linkGmaps: string | null;
   fotoCover: string | null;
   harga: number;
   kuotaMax: number;
@@ -297,15 +299,28 @@ export function UpcomingEvents() {
                   <h3 className="font-display text-lg font-bold leading-tight text-ink">
                     {event.judul}
                   </h3>
-                  <div className="flex gap-4 text-sm text-muted-foreground">
+                  <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="size-3.5" />
-                      {formatTanggal(event.tanggal)}
+                      <Calendar className="size-3.5 shrink-0" />
+                      <span>{formatTanggal(event.tanggal)}{event.waktuMulai ? ` • ${event.waktuMulai} WIB` : ""}</span>
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="size-3.5" />
-                      {event.lokasi}
-                    </span>
+                    {event.linkGmaps ? (
+                      <a 
+                        href={event.linkGmaps} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-1.5 hover:text-primary transition-colors hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MapPin className="size-3.5 shrink-0" />
+                        <span>{event.lokasi}</span>
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="size-3.5 shrink-0" />
+                        <span>{event.lokasi}</span>
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {truncate(event.deskripsi, 100)}

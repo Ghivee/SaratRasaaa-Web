@@ -1,33 +1,9 @@
 'use client';
 
 /**
- * NotificationDialog — Saratrasaa (Task 8-E)
+ * NotificationDialog — Saratrasaa
  *
- * LLM-powered WhatsApp notification composer for verified pendaftar.
- *
- * Flow:
- *   1. Admin opens the dialog (either from the pendaftar table row's
- *      MessageCircle icon, or from the "Buat Pesan Notifikasi" button in
- *      the pendaftar detail modal — the latter shows only for verified
- *      pendaftar).
- *   2. The dialog immediately fires POST /api/admin/pendaftar/notify with
- *      the pendaftar's kode. The server fetches the pendaftar + event,
- *      calls z-ai-web-dev-sdk to compose a friendly Indonesian message,
- *      and returns it.
- *   3. The message renders in a chat-bubble style block. Action buttons:
- *        - Salin Pesan        — copies to clipboard
- *        - Buka WhatsApp      — opens https://wa.me/<phone>?text=<encoded>
- *        - Regenerasi         — calls the API again for a fresh variation
- *        - Tutup              — closes the dialog
- *
- * Error handling:
- *   - On LLM failure (502) or network error, show an inline error block
- *     with a "Coba lagi" button that re-fires the request.
- *   - On 401 (token expired), surface the error and let the parent close.
- *
- * Styling: Saratrasaa pink palette. No indigo/blue. WhatsApp button uses
- * the brand's green (#25D366) as a single accent — allowed since it's a
- * recognised brand affordance, not a primary UI color.
+ * WhatsApp notification composer for verified pendaftar. Supports bulk kodes.
  */
 
 import * as React from "react";
@@ -42,6 +18,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Sparkles,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -54,9 +31,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { formatIDR } from "@/lib/saratrasa";
+import { Textarea } from "@/components/ui/textarea";
 
 /* -------------------------------------------------------------------------- */
-/* Types — matches the /api/admin/pendaftar/notify response                   */
+/* Types                                                                       */
 /* -------------------------------------------------------------------------- */
 
 interface NotifyPendaftar {
@@ -68,9 +47,7 @@ interface NotifyPendaftar {
   status: "pending_payment" | "verified" | "rejected";
 }
 
-interface NotifyResponse {
-  ok: true;
-  message: string;
+interface NotifyData {
   pendaftar: NotifyPendaftar;
   event: {
     judul: string;
@@ -78,6 +55,11 @@ interface NotifyResponse {
     lokasi: string;
   };
   shareUrl: string;
+}
+
+interface NotifyResponse {
+  ok: true;
+  data: NotifyData[];
 }
 
 interface NotifyErrorResponse {
@@ -88,46 +70,19 @@ interface NotifyErrorResponse {
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Normalize an Indonesian phone number for wa.me.
- *
- * wa.me expects the international format WITHOUT the leading "+" or "00".
- * Indonesian numbers come in many shapes — we handle the common ones:
- *   - "081234567890"  → "6281234567890"
- *   - "+6281234567890" → "6281234567890"
- *   - "6281234567890"  → unchanged
- *   - "0812 3456 7890" → "6281234567890"  (strips spaces / dashes)
- *
- * Returns "" if the input doesn't look like a phone number (length < 8 after
- * stripping non-digits), so the caller can fall back to the no-phone wa.me URL.
- */
 function normalizeWaNumber(raw: string): string {
   if (!raw) return "";
-  // Keep only digits and a leading +.
   let s = raw.trim();
   const hasPlus = s.startsWith("+");
   s = s.replace(/[^\d]/g, "");
   if (!s) return "";
-  if (hasPlus) {
-    // Already international — strip the leading country code's "+"
-    return s;
-  }
-  if (s.startsWith("00")) {
-    // International prefix with "00"
-    return s.slice(2);
-  }
-  if (s.startsWith("0")) {
-    // Indonesian local — replace leading 0 with 62
-    return "62" + s.slice(1);
-  }
-  if (s.startsWith("62")) {
-    return s;
-  }
-  // Fallback: assume Indonesian local without leading 0
+  if (hasPlus) return s;
+  if (s.startsWith("00")) return s.slice(2);
+  if (s.startsWith("0")) return "62" + s.slice(1);
+  if (s.startsWith("62")) return s;
   return "62" + s;
 }
 
-/** Format an ISO date (YYYY-MM-DD) as Indonesian "15 Maret 2025". */
 function formatTanggal(iso: string): string {
   if (!iso) return "—";
   try {
@@ -141,17 +96,53 @@ function formatTanggal(iso: string): string {
   }
 }
 
+const DEFAULT_TEMPLATE = `Halo {nama}! 👋
+
+Yeay, pembayaranmu sudah kami verifikasi! ✅
+
+📋 *Detail Pendaftaran:*
+🎪 Event: {eventJudul}
+📅 Tanggal: {eventTanggal}
+📍 Lokasi: {eventLokasi}
+👥 Jumlah Orang: {jumlahOrang}
+💰 Total Bayar: {totalBayar}
+
+🎫 Kode Referensi: *{kodeReferensi}*
+Simpan kode ini baik-baik ya, kamu akan butuhkan saat check-in nanti.
+
+🔗 Cek status & tiketmu di sini:
+{shareUrl}
+
+Sampai jumpa di lokasi! 🌿💚
+— Tim Saratrasaa`;
+
+function hydrateTemplate(template: string, d: NotifyData): string {
+  return template
+    .replace(/{nama}/g, d.pendaftar.nama)
+    .replace(/{eventJudul}/g, d.event.judul)
+    .replace(/{eventTanggal}/g, formatTanggal(d.event.tanggal))
+    .replace(/{eventLokasi}/g, d.event.lokasi)
+    .replace(/{jumlahOrang}/g, String(d.pendaftar.jumlahOrang))
+    .replace(/{totalBayar}/g, formatIDR(d.pendaftar.totalBayar))
+    .replace(/{kodeReferensi}/g, d.pendaftar.kodeReferensi)
+    .replace(/{shareUrl}/g, d.shareUrl);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Props                                                                        */
 /* -------------------------------------------------------------------------- */
 
 interface NotificationDialogProps {
-  /** When non-null, the dialog is open for this kode. */
-  kode: string | null;
+  /** Array of kodes. If null, the dialog is closed. */
+  kodes: string[] | null;
   /** Admin token — sent as X-Admin-Token header on the fetch. */
   token: string;
   /** Called when the user wants to close the dialog (Tutup / backdrop / ESC). */
   onClose: () => void;
+  /** Custom default template for the textarea. */
+  defaultTemplate?: string;
+  /** Custom title for the dialog header. */
+  title?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -159,34 +150,41 @@ interface NotificationDialogProps {
 /* -------------------------------------------------------------------------- */
 
 export function NotificationDialog({
-  kode,
+  kodes,
   token,
   onClose,
+  defaultTemplate = DEFAULT_TEMPLATE,
+  title = "Pesan Notifikasi",
 }: NotificationDialogProps) {
-  const open = kode !== null;
+  const open = kodes !== null;
 
-  const [data, setData] = React.useState<NotifyResponse | null>(null);
+  const [data, setData] = React.useState<NotifyData[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
-  // bump on regenerate to force the fetch effect to re-run with a new nonce
-  const [regenNonce, setRegenNonce] = React.useState(0);
+  const [template, setTemplate] = React.useState(defaultTemplate);
+  const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
+  
+  // Track send statuses for each recipient
+  const [sendingAll, setSendingAll] = React.useState(false);
+  const [sendStatus, setSendStatus] = React.useState<Record<string, "sending" | "success" | "error">>({});
 
-  // Reset state + fire the fetch whenever the dialog opens for a new kode,
-  // or the regenNonce changes (regenerate button).
   React.useEffect(() => {
-    if (!open || !kode || !token) {
+    // Reset template if defaultTemplate changes while closed
+    if (open) {
+      setTemplate(defaultTemplate);
+    }
+  }, [open, defaultTemplate]);
+
+  React.useEffect(() => {
+    if (!open || !kodes || kodes.length === 0 || !token) {
       setData(null);
       setError(null);
-      setCopied(false);
+      setSendStatus({});
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    // Keep the previous message visible while regenerating for less jarring
-    // UX — only clear on the first load for a new kode.
-    setData((prev) => (prev?.pendaftar.kodeReferensi === kode ? prev : null));
 
     (async () => {
       try {
@@ -196,7 +194,7 @@ export function NotificationDialog({
             "Content-Type": "application/json",
             "X-Admin-Token": token,
           },
-          body: JSON.stringify({ kode }),
+          body: JSON.stringify({ kodes }),
         });
         if (cancelled) return;
         if (res.status === 401) {
@@ -204,44 +202,17 @@ export function NotificationDialog({
           onClose();
           return;
         }
-        if (res.status === 404) {
-          setError("Pendaftar tidak ditemukan.");
-          return;
-        }
-        if (res.status === 429) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as NotifyErrorResponse;
-          setError(
-            body.error ||
-              "Terlalu banyak permintaan pesan. Tunggu sebentar lalu coba lagi.",
-          );
-          return;
-        }
-        if (res.status === 502) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as NotifyErrorResponse;
-          setError(
-            body.error ||
-              "Gagal membuat pesan dengan LLM. Coba lagi sebentar.",
-          );
-          return;
-        }
         if (!res.ok) {
-          const body = (await res
-            .json()
-            .catch(() => ({}))) as NotifyErrorResponse;
+          const body = (await res.json().catch(() => ({}))) as NotifyErrorResponse;
           setError(body.error || "Gagal membuat pesan.");
           return;
         }
         const json = (await res.json()) as NotifyResponse;
         if (cancelled) return;
-        setData(json);
-        setCopied(false);
+        setData(json.data);
       } catch (err) {
         if (cancelled) return;
-        setError("Gagal membuat pesan: " + (err as Error).message);
+        setError("Gagal memuat data: " + (err as Error).message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -250,18 +221,15 @@ export function NotificationDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, kode, token, regenNonce]);
+  }, [open, kodes, token]);
 
-  /** Copy the message to the clipboard. */
-  async function handleCopy() {
-    if (!data) return;
+  async function handleCopy(msg: string, idx: number) {
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(data.message);
+        await navigator.clipboard.writeText(msg);
       } else {
-        // Fallback for non-secure contexts (e.g. plain HTTP on localhost).
         const ta = document.createElement("textarea");
-        ta.value = data.message;
+        ta.value = msg;
         ta.style.position = "fixed";
         ta.style.left = "-9999px";
         document.body.appendChild(ta);
@@ -269,238 +237,202 @@ export function NotificationDialog({
         document.execCommand("copy");
         document.body.removeChild(ta);
       }
-      setCopied(true);
+      setCopiedIndex(idx);
       toast.success("Pesan disalin ke clipboard.");
-      // Reset the copied checkmark after 2s so the icon returns to "Copy".
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopiedIndex(null), 2000);
     } catch (err) {
       toast.error("Gagal menyalin: " + (err as Error).message);
     }
   }
 
-  /** Open WhatsApp with the message + pendaftar's phone pre-filled. */
-  function handleOpenWhatsApp() {
-    if (!data) return;
-    const text = encodeURIComponent(data.message);
-    const phone = normalizeWaNumber(data.pendaftar.kontak);
-    // If we have a valid phone, open the direct chat; otherwise open the
-    // "share" intent without a number (admin can pick a chat manually).
-    const url = phone
-      ? `https://wa.me/${phone}?text=${text}`
-      : `https://wa.me/?text=${text}`;
+  function handleOpenWhatsApp(msg: string, phoneStr: string) {
+    const text = encodeURIComponent(msg);
+    const phone = normalizeWaNumber(phoneStr);
+    const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  /** Regenerate — re-fire the API call. */
-  function handleRegenerate() {
-    if (!kode || loading) return;
-    setRegenNonce((n) => n + 1);
+  async function handleSendViaFonnte(recipients: NotifyData[]) {
+    setSendingAll(true);
+    // Mark sending
+    const newStatus = { ...sendStatus };
+    recipients.forEach(r => newStatus[r.pendaftar.kodeReferensi] = "sending");
+    setSendStatus(newStatus);
+
+    try {
+      const messages = recipients.map(d => ({
+        kode: d.pendaftar.kodeReferensi,
+        target: normalizeWaNumber(d.pendaftar.kontak),
+        text: hydrateTemplate(template, d)
+      }));
+
+      const res = await fetch("/api/admin/whatsapp/send-bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": token,
+        },
+        body: JSON.stringify({ messages }),
+      });
+
+      if (!res.ok) throw new Error("Gagal terhubung ke server");
+      
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Gagal mengirim");
+
+      const updatedStatus = { ...newStatus };
+      json.results.forEach((r: any) => {
+        updatedStatus[r.kode] = r.success ? "success" : "error";
+      });
+      setSendStatus(updatedStatus);
+      
+      toast.success(`Berhasil mengirim ${json.successCount} pesan, gagal ${json.failCount}.`);
+    } catch (err: any) {
+      toast.error(err.message || "Gagal memproses pengiriman");
+      const errStatus = { ...newStatus };
+      recipients.forEach(r => errStatus[r.pendaftar.kodeReferensi] = "error");
+      setSendStatus(errStatus);
+    } finally {
+      setSendingAll(false);
+    }
   }
 
-  // Derived: which phone number will WhatsApp open? (for the helper text)
-  const waPhone = data ? normalizeWaNumber(data.pendaftar.kontak) : "";
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) onClose();
-      }}
-    >
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-4xl max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-lg flex items-center gap-2">
             <Sparkles className="size-5 text-pink-primary" />
-            Pesan Notifikasi WhatsApp
+            {title} {data && data.length > 1 ? "Massal" : ""}
           </DialogTitle>
           <DialogDescription>
-            Dibuat otomatis oleh AI. Periksa isi pesan sebelum dikirim —
-            kamu bisa salin, buka WhatsApp, atau regenerasi.
+            Edit template pesan di bawah ini. Variabel yang diapit kurung kurawal (contoh: <code className="bg-muted px-1 rounded">{'{nama}'}</code>) akan otomatis diganti dengan data tiap pendaftar.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Pendaftar info summary — always visible (even during loading) */}
-        {data ? (
-          <div className="rounded-lg border border-border bg-pink-soft/20 p-3 space-y-1.5 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Nama</span>
-              <span className="font-medium text-right truncate max-w-[60%]">
-                {data.pendaftar.nama}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Kode Ref</span>
-              <span className="font-mono text-pink-primary">
-                {data.pendaftar.kodeReferensi}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Event</span>
-              <span className="text-right truncate max-w-[60%]">
-                {data.event.judul}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Tanggal</span>
-              <span className="font-data">
-                {formatTanggal(data.event.tanggal)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Kontak</span>
-              <span className="font-mono text-right break-all">
-                {data.pendaftar.kontak}
-                {waPhone && waPhone !== data.pendaftar.kontak && (
-                  <span className="text-xs text-muted-foreground ml-1">
-                    ({waPhone})
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <span className="text-muted-foreground">Status</span>
-              <Badge
-                className={
-                  data.pendaftar.status === "verified"
-                    ? "border-transparent bg-success text-white hover:bg-success"
-                    : data.pendaftar.status === "rejected"
-                      ? "border-transparent bg-destructive text-white hover:bg-destructive"
-                      : "border-transparent bg-amber text-ink hover:bg-amber"
-                }
-              >
-                {data.pendaftar.status === "verified"
-                  ? "Verified"
-                  : data.pendaftar.status === "rejected"
-                    ? "Rejected"
-                    : "Pending"}
-              </Badge>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Body — loading / error / message bubble */}
-        {loading && !data ? (
+        {loading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
             <Loader2 className="size-7 animate-spin text-pink-primary" />
-            <p className="text-sm text-muted-foreground text-center">
-              Menyusun pesan dengan AI…
-              <br />
-              <span className="text-xs">Biasanya 3–8 detik.</span>
-            </p>
+            <p className="text-sm text-muted-foreground text-center">Memuat data pendaftar…</p>
           </div>
         ) : error ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2">
             <div className="flex items-start gap-2">
               <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-destructive text-sm">
-                  Gagal membuat pesan
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 break-words">
-                  {error}
-                </p>
+                <p className="font-medium text-destructive text-sm">Gagal memuat data</p>
+                <p className="text-xs text-muted-foreground mt-1 break-words">{error}</p>
               </div>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleRegenerate}
-              disabled={loading}
-              className="w-full"
-            >
-              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-              Coba lagi
-            </Button>
           </div>
-        ) : data ? (
-          <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <MessageCircle className="size-3" />
-              Pratinjau Pesan
-              {loading ? (
-                <Loader2 className="size-3 animate-spin ml-1" />
-              ) : null}
+        ) : data && data.length > 0 ? (
+          <div className="space-y-4">
+            {/* Template Editor */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <span>Template Pesan</span>
+                </div>
+                <div className="text-[10px] bg-muted px-2 py-1 rounded text-muted-foreground overflow-x-auto max-w-[50%] md:max-w-full">
+                  Tersedia: {'{nama}'}, {'{eventJudul}'}, {'{eventTanggal}'}, {'{eventLokasi}'}, {'{jumlahOrang}'}, {'{totalBayar}'}, {'{kodeReferensi}'}, {'{shareUrl}'}
+                </div>
+              </div>
+              <Textarea
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                className="min-h-[160px] font-mono text-sm leading-relaxed"
+                placeholder="Ketik template pesan di sini..."
+              />
             </div>
-            {/* Chat-bubble style — rounded with a "tail" feel using rounded-2xl
-                and asymmetric corner radii. */}
-            <div className="bg-[#dcf8c6] dark:bg-[#0b3d2e] text-foreground rounded-2xl rounded-tl-sm p-3.5 shadow-sm">
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                {data.message}
-              </p>
-              {/* Footer inside the bubble — link preview + meta */}
-              <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/10 flex items-center justify-between gap-2">
-                <a
-                  href={data.shareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-pink-primary hover:underline inline-flex items-center gap-1 min-w-0 truncate"
-                  title={data.shareUrl}
+
+            {/* Recipient List */}
+            <div className="space-y-3 mt-6">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <MessageCircle className="size-3" />
+                  Daftar Penerima ({data.length})
+                </div>
+                <Button 
+                  size="sm" 
+                  disabled={sendingAll || data.length === 0}
+                  onClick={() => handleSendViaFonnte(data)}
+                  className="h-8 gap-2 bg-pink-primary hover:bg-pink-700 text-white"
                 >
-                  <ExternalLink className="size-2.5 shrink-0" />
-                  <span className="truncate">{data.shareUrl}</span>
-                </a>
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  {data.message.length} karakter
-                </span>
+                  {sendingAll ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  Kirim Semua via Fonnte
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[40vh] overflow-y-auto p-1">
+                {data.map((d, idx) => {
+                  const finalMsg = hydrateTemplate(template, d);
+                  const status = sendStatus[d.pendaftar.kodeReferensi];
+                  return (
+                    <div key={d.pendaftar.kodeReferensi} className="bg-card border rounded-lg p-3 space-y-3 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm truncate max-w-[70%]">{d.pendaftar.nama}</span>
+                          <span className="text-xs font-mono text-pink-primary shrink-0">{d.pendaftar.kodeReferensi}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono truncate mb-2">{d.pendaftar.kontak}</p>
+                        
+                        {/* Status Indicator */}
+                        {status && (
+                          <div className={cn(
+                            "flex items-center gap-1.5 text-xs font-medium mb-3",
+                            status === "sending" ? "text-amber-500" :
+                            status === "success" ? "text-success" : "text-destructive"
+                          )}>
+                            {status === "sending" && <Loader2 className="size-3 animate-spin" />}
+                            {status === "success" && <Check className="size-3" />}
+                            {status === "error" && <AlertTriangle className="size-3" />}
+                            <span>
+                              {status === "sending" ? "Mengirim..." : 
+                               status === "success" ? "Terkirim" : "Gagal Terkirim"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                         <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(finalMsg, idx)}
+                          className="flex-1 min-w-[80px]"
+                          title="Salin Pesan"
+                        >
+                          {copiedIndex === idx ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleSendViaFonnte([d])}
+                          disabled={status === "sending" || sendingAll}
+                          className="flex-1 min-w-[80px] bg-pink-primary/10 text-pink-700 hover:bg-pink-primary/20 border-transparent shadow-none"
+                        >
+                          <Send className="size-3.5 mr-1" />
+                          Kirim
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleOpenWhatsApp(finalMsg, d.pendaftar.kontak)}
+                          className="flex-none px-3 bg-[#25D366] text-white hover:bg-[#1da851] border-transparent"
+                          title="Buka WA.me Manual"
+                        >
+                          <MessageCircle className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            {data.message.length > 500 ? (
-              <p className="text-xs text-amber flex items-center gap-1.5">
-                <AlertTriangle className="size-3 shrink-0" />
-                Pesan melebihi 500 karakter — WhatsApp mungkin memotongnya
-                jika diteruskan sebagai pesan broadcast.
-              </p>
-            ) : null}
           </div>
         ) : null}
 
-        <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleCopy}
-            disabled={!data || loading}
-            className="flex-1 min-w-[120px]"
-          >
-            {copied ? (
-              <>
-                <Check className="size-4 text-success" />
-                Tersalin
-              </>
-            ) : (
-              <>
-                <Copy className="size-4" />
-                Salin Pesan
-              </>
-            )}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleOpenWhatsApp}
-            disabled={!data || loading}
-            className="flex-1 min-w-[120px] bg-[#25D366] text-white hover:bg-[#1da851] border-transparent"
-          >
-            <MessageCircle className="size-4" />
-            Buka WhatsApp
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleRegenerate}
-            disabled={loading || !kode}
-            className="flex-1 min-w-[120px]"
-          >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            Regenerasi
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            className="w-full sm:w-auto"
-          >
-            <X className="size-4" />
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="ghost" onClick={onClose} className="w-full sm:w-auto">
             Tutup
           </Button>
         </DialogFooter>

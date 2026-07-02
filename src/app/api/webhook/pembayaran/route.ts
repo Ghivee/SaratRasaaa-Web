@@ -68,6 +68,18 @@ function parseAmount(body: unknown): number | null {
   return Math.floor(n);
 }
 
+/**
+ * Extract the transaction ID from common provider field names.
+ */
+function parseTrxId(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  const raw = b.trx_id ?? b.trxId ?? b.transaction_id ?? b.transactionId ?? b.id;
+  if (typeof raw === "string" && raw.trim() !== "") return raw.trim();
+  if (typeof raw === "number") return String(raw);
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const clientIp = getClientIp(req);
 
@@ -88,7 +100,7 @@ export async function POST(req: NextRequest) {
   /* ------------------------------------------------------------------ */
   /* 2. HMAC-SHA256 signature verification (fixes spoofing).             */
   /* ------------------------------------------------------------------ */
-  const sigHeader = req.headers.get("x-webhook-signature");
+  const sigHeader = req.headers.get("x-yogateway-signature");
   const sigOk = verifyWebhookSignature(rawBody, sigHeader);
   if (!sigOk) {
     log(clientIp, null, "n/a", "reason=bad_signature");
@@ -141,9 +153,10 @@ export async function POST(req: NextRequest) {
   }
 
   /* ------------------------------------------------------------------ */
-  /* 5. Validate amount.                                                 */
+  /* 5. Validate amount & trxId                                          */
   /* ------------------------------------------------------------------ */
   const amount = parseAmount(body);
+  const trxId = parseTrxId(body);
   if (amount === null) {
     log(clientIp, null, "n/a", "reason=bad_amount");
     return NextResponse.json({ error: "Nominal pembayaran tidak valid." }, { status: 400 });
@@ -156,16 +169,22 @@ export async function POST(req: NextRequest) {
   /* ------------------------------------------------------------------ */
   const release = await acquireLock("webhook:pembayaran");
   try {
-    // Oldest pending pendaftar with matching totalBayar. kode_unik makes
-    // totals effectively unique per-event, but multiple events could share
-    // a nominal — picking the oldest is a safe, deterministic tiebreak.
-    const match = await db.pendaftar.findFirst({
-      where: {
-        totalBayar: amount,
-        status: "pending_payment",
-      },
-      orderBy: { createdAt: "asc" },
-    });
+    // Match by trxId directly first. If no trxId or no match, fallback to amount.
+    let match = null;
+    
+    if (trxId) {
+      match = await db.pendaftar.findFirst({
+        where: { trxId, status: "pending_payment" },
+        orderBy: { createdAt: "asc" },
+      });
+    }
+
+    if (!match) {
+      match = await db.pendaftar.findFirst({
+        where: { totalBayar: amount, status: "pending_payment" },
+        orderBy: { createdAt: "asc" },
+      });
+    }
 
     if (!match) {
       // Normal case: a transfer with no matching pending registration.
@@ -202,6 +221,8 @@ export async function POST(req: NextRequest) {
         verifiedAt: new Date(),
       },
     });
+
+    // Keuangan is dynamically calculated in the admin API based on verified pendaftars
 
     log(clientIp, amount, "true", `kode=${match.kodeReferensi}`);
     try {

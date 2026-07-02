@@ -20,11 +20,11 @@ interface FaqItem {
 const FAQS: FaqItem[] = [
   {
     q: "Apakah harus bayar untuk ikut event?",
-    a: "Ya, setiap event punya harga kontribusi per orang. Dana ini untuk operasional (transport, konsumsi, alat). Tapi kalau kamu benar-benar tak bisa, DM kami — kami punya slot keringanan.",
+    a: "Ya, setiap event punya harga kontribusi per orang. Dana ini untuk operasional (transport, konsumsi, alat). Tapi kalau kamu benar-benar tak bisa, silakan DM kami karena kami punya slot keringanan.",
   },
   {
     q: "Kenapa harus transfer sampai 3 digit terakhir?",
-    a: "Karena kami verifikasi pembayaran otomatis berdasarkan nominal. Kode unik (3 digit terakhir) memastikan nominal kamu unik — nggak akan tertukar dengan peserta lain.",
+    a: "Tiga digit itu adalah 'kode unik' untuk membantu sistem kami mengenali pembayaranmu secara otomatis. Pastikan nominal transfer persis sesuai agar pendaftaranmu langsung terkonfirmasi tanpa harus menunggu manual.",
   },
   {
     q: "Berapa lama verifikasi pembayaran?",
@@ -40,7 +40,7 @@ const FAQS: FaqItem[] = [
   },
   {
     q: "Bisa membatalkan pendaftaran?",
-    a: "Pembayaran yang sudah masuk tidak bisa di-refund. Tapi kalau belum transfer, kamu bisa abaikan saja — pendaftaran yang statusnya 'menunggu pembayaran' lebih dari 3 hari akan otomatis dibersihkan.",
+    a: "Pembayaran yang sudah masuk tidak bisa di-refund. Tapi kalau belum transfer, kamu bisa abaikan saja karena pendaftaran yang statusnya 'menunggu pembayaran' lebih dari 3 hari akan otomatis dibersihkan.",
   },
 ];
 

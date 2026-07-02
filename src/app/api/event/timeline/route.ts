@@ -109,7 +109,9 @@ export async function GET() {
         id: e.id,
         judul: e.judul,
         tanggal: e.tanggal,
+        waktuMulai: e.waktuMulai,
         lokasi: e.lokasi,
+        linkGmaps: e.linkGmaps,
         fotoCover: e.fotoCover,
       };
 

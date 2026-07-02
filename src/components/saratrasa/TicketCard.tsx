@@ -341,7 +341,7 @@ export function TicketCard({ pendaftar }: TicketCardProps) {
           }}
           onMouseLeave={() => setHovered(false)}
           className={cn(
-            "ticket-stub group relative overflow-hidden rounded-2xl bg-card shadow-2xl",
+            "group relative overflow-hidden rounded-2xl bg-card shadow-2xl border border-border/50",
           )}
         >
           {/*
@@ -365,9 +365,9 @@ export function TicketCard({ pendaftar }: TicketCardProps) {
             </div>
           )}
 
-          <div className="relative z-0 grid grid-cols-1 sm:grid-cols-2">
+          <div className="relative z-0 flex flex-col sm:flex-row">
             {/* ───────── LEFT panel — the "main ticket" ───────── */}
-            <div className="relative flex flex-col items-center gap-3 p-5 text-center sm:p-6">
+            <div className="relative flex w-full sm:w-1/2 flex-col items-center justify-center gap-3 p-6 text-center sm:p-8">
               {/*
                 Decorative dotted watermark behind the QR — pink dots on
                 white at 8% opacity (subtle texture, doesn't fight the QR).
@@ -430,25 +430,20 @@ export function TicketCard({ pendaftar }: TicketCardProps) {
             </div>
 
             {/* ───────── RIGHT panel — the "stub info" ───────── */}
-            {/*
-              .ticket-perf (unlayered in globals.css) provides
-              `border-left: 2px dashed var(--pink-soft)` + ::before/::after
-              circle cutouts. Because it is unlayered, Tailwind utilities
-              cannot override it without `!important`.
-              Mobile: we want a HORIZONTAL perforation instead. So:
-                - !border-l-0 sm:!border-l-2 → kill left border on mobile,
-                  restore on sm+ (style+color still come from .ticket-perf).
-                - border-t-2 border-dashed border-pink-soft sm:border-t-0 →
-                  add horizontal dashed top border on mobile only.
-                - hide ::before/::after circles on mobile (they're positioned
-                  for vertical layout and would look wrong horizontally).
-            */}
             <div
               className={cn(
-                "ticket-perf p-5 sm:p-6",
-                "[&::before]:hidden [&::after]:hidden sm:[&::before]:block sm:[&::after]:block",
-                "border-t-2 border-dashed border-pink-soft sm:border-t-0",
-                "!border-l-0 sm:!border-l-2",
+                "relative p-5 sm:p-6 sm:w-1/2 flex flex-col justify-center",
+                // Mobile: dashed border at top. Desktop: dashed border at left.
+                "border-t-2 border-dashed border-pink-soft sm:border-t-0 sm:border-l-2",
+                // Cutout pseudo-elements using standard Tailwind
+                "before:absolute before:content-[''] before:w-[18px] before:h-[18px] before:bg-background before:rounded-full",
+                "after:absolute after:content-[''] after:w-[18px] after:h-[18px] after:bg-background after:rounded-full",
+                // Mobile layout cutouts (left/right of the horizontal dashed line)
+                "before:-left-[10px] before:-top-[10px]",
+                "after:-right-[10px] after:-top-[10px]",
+                // Desktop layout cutouts (top/bottom of the vertical dashed line)
+                "sm:before:-left-[10px] sm:before:-top-[10px] sm:before:-right-auto",
+                "sm:after:-left-[10px] sm:after:-bottom-[10px] sm:after:-right-auto sm:after:-top-auto"
               )}
             >
               <div className="space-y-3">

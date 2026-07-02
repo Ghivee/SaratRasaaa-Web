@@ -42,6 +42,8 @@ export async function GET(_req: NextRequest) {
           deskripsi: event.deskripsi,
           tanggal: event.tanggal,
           lokasi: event.lokasi,
+          linkGmaps: event.linkGmaps,
+          waktuMulai: event.waktuMulai,
           fotoCover: event.fotoCover,
           harga: event.harga,
           kuotaMax: event.kuotaMax,

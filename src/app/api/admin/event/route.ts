@@ -38,6 +38,9 @@ async function saveDataUrl(
   dataUrl: string,
   filenamePrefix: string,
 ): Promise<{ relativePath: string; ext: string } | { error: string }> {
+  if (!supabase) {
+    return { error: "Koneksi penyimpanan file belum dikonfigurasi. Periksa SUPABASE_SERVICE_ROLE_KEY." };
+  }
   const result = validateUpload(dataUrl);
   if (!result.ok || !result.ext) {
     return { error: result.error || "File tidak valid." };
@@ -145,6 +148,16 @@ export async function POST(req: NextRequest) {
       ? body.linkGrupWa.trim()
       : null;
 
+  const waktuMulai =
+    typeof body.waktuMulai === "string" && body.waktuMulai.trim()
+      ? body.waktuMulai.trim()
+      : null;
+
+  const linkGmaps =
+    typeof body.linkGmaps === "string" && body.linkGmaps.trim()
+      ? body.linkGmaps.trim()
+      : null;
+
   // ----- optional cover photo upload (validate + persist BEFORE touching DB) -----
   let fotoCoverPath: string | undefined;
   if (fotoCover) {
@@ -160,7 +173,9 @@ export async function POST(req: NextRequest) {
     judul,
     deskripsi,
     tanggal,
+    waktuMulai,
     lokasi,
+    linkGmaps,
     harga,
     kuotaMax,
     status,
@@ -214,5 +229,54 @@ export async function POST(req: NextRequest) {
     // Prisma throws P2025 when `update` is called for a missing id.
     const message = (err as Error).message || "Gagal menyimpan event.";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* DELETE — hapus event (admin only)                                           */
+/* -------------------------------------------------------------------------- */
+
+export async function DELETE(req: NextRequest) {
+  const fail = requireAdmin(req);
+  if (fail) return fail;
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+
+  if (!id || typeof id !== "string" || !id.trim()) {
+    return NextResponse.json(
+      { error: "Parameter 'id' wajib diisi." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    // Check if event exists
+    const event = await db.event.findUnique({
+      where: { id: id.trim() },
+      select: {
+        id: true,
+        judul: true,
+        _count: { select: { pendaftar: true } },
+      },
+    });
+
+    if (!event) {
+      return NextResponse.json(
+        { error: "Event tidak ditemukan." },
+        { status: 404 },
+      );
+    }
+
+    // Delete event (cascade will handle pendaftar, peserta, checkIns)
+    await db.event.delete({ where: { id: id.trim() } });
+
+    return NextResponse.json({
+      ok: true,
+      message: `Event "${event.judul}" berhasil dihapus.`,
+    });
+  } catch (err) {
+    const message = (err as Error).message || "Gagal menghapus event.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

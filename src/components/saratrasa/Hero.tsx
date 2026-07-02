@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DotPattern } from "./DecorativePatterns";
 import type { ActiveEventSummary } from "./types";
+import { StackedPhotoGallery } from "./StackedPhotoGallery";
 
 interface HeroProps {
   activeEvent: ActiveEventSummary | null;
@@ -94,26 +95,11 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
   const reduceMotion = useReducedMotion();
   const noActive = !activeEvent;
   const lowQuota = !!activeEvent && activeEvent.sisaKuota <= 5;
-
-  // Parallax: as the user scrolls the first 500px, the hero image drifts up
-  // (-60px) and rotates from 1deg → -2deg, creating subtle depth. Disabled
-  // entirely when prefers-reduced-motion is set (both endpoints collapse).
-  const { scrollY } = useScroll();
-  const imageY = useTransform(
-    scrollY,
-    [0, 500],
-    [0, reduceMotion ? 0 : -60]
-  );
-  const imageRotate = useTransform(
-    scrollY,
-    [0, 500],
-    [1, reduceMotion ? 1 : -2]
-  );
-
+  const [isFlipped, setIsFlipped] = React.useState(false);
   return (
     <section
       id="beranda"
-      className="relative overflow-hidden px-4 pb-16 pt-10 sm:px-6 sm:pt-14 lg:px-8 lg:pb-24 lg:pt-16"
+      className="relative w-full overflow-hidden px-4 pt-8 pb-12 sm:px-6 sm:pt-10 lg:px-8 lg:pt-10 flex flex-col justify-start"
     >
       {/* Subtle DotPattern overlay — a grid of tiny pink dots at 5% opacity
           sitting behind the hero content. Adds texture without competing
@@ -221,14 +207,14 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
         </div>
       )}
 
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 lg:grid-cols-2 lg:gap-12">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-6 lg:grid-cols-2 lg:gap-8 relative z-10">
         {/* Left column */}
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          whileInView={{ opacity: 1 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-4 sm:gap-5"
         >
           {/* Badge with shimmer effect */}
           <div className="inline-flex w-fit items-center gap-2 rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium text-foreground relative overflow-hidden">
@@ -246,8 +232,8 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
           </div>
 
           <h1
-            className="font-display font-bold leading-[1.05] tracking-tight text-foreground"
-            style={{ fontSize: "clamp(2.5rem, 6vw, 4.5rem)" }}
+            className="font-display font-bold leading-[1.1] tracking-tight text-foreground"
+            style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
           >
             Tangan kecil yang menggerakkan{' '}
             <span className="relative inline-block">
@@ -261,37 +247,34 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
             .
           </h1>
 
-          <p className="max-w-prose text-base text-muted-foreground sm:text-lg">
-            Saratrasaa adalah komunitas relawan muda yang menjalankan aksi
-            bersih-bersih sungai dan pantai, donor darah, hingga penanaman
-            mangrove di berbagai kota di Indonesia. Bukan retorika — kita
-            turun, kita gelar, kita tuntas.
+          <p className="max-w-prose text-sm text-muted-foreground sm:text-base leading-relaxed">
+            Saratrasaa adalah wadah pemuda-pemudi di Banjarnegara yang bergerak aktif memberikan dampak positif melalui berbagai kegiatan sosial. Mulai dari kunjungan berbagi ke panti asuhan, program edukasi ke sekolah-sekolah, hingga aksi nyata kepedulian lingkungan lainnya.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-1">
             <Button
               type="button"
               onClick={onDaftar}
               disabled={noActive}
-              className="h-11 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+              className="h-10 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
             >
               Daftar Sekarang
-              <ArrowRight className="size-4" aria-hidden />
+              <ArrowRight className="size-4 ml-1" aria-hidden />
             </Button>
             <Button
               type="button"
               variant="ghost"
               onClick={scrollToHistory}
-              className="h-11 rounded-full px-6 text-base font-medium text-foreground hover:bg-secondary hover:text-foreground"
+              className="h-10 rounded-full px-5 text-sm font-medium text-foreground hover:bg-secondary hover:text-foreground"
             >
-              <History className="size-4" aria-hidden />
+              <History className="size-4 mr-1" aria-hidden />
               Lihat Riwayat
             </Button>
           </div>
 
           {activeEvent && (
-            <div className="mt-2 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/50 p-4 transition-all duration-300 hover:shadow-md sm:p-5 border-l-4 border-l-primary">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+            <div className="mt-3 sm:mt-4 w-full max-w-lg rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/50 p-4 transition-all duration-300 hover:shadow-md border-l-4 border-l-primary">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
                 <span className="inline-block size-2 animate-pulse rounded-full bg-primary" aria-hidden />
                 Pendaftaran dibuka
               </div>
@@ -314,11 +297,11 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
 
         {/* Right column — image with floating blobs + decorative tape */}
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          whileInView={{ opacity: 1 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="relative mx-auto w-full max-w-md lg:max-w-none"
+          className="relative mt-8 lg:mt-0 mx-auto w-full flex items-center justify-center lg:justify-end"
         >
           {/* Decorative blobs */}
           <div
@@ -338,39 +321,9 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
             style={{ boxShadow: '0 0 60px -15px rgba(255, 45, 120, 0.15)' }}
           />
 
-          {/* Decorative "tape" at top of image */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-2 left-1/2 z-10 h-6 w-16 -translate-x-1/2 rotate-[-2deg] rounded-sm bg-[var(--amber)]/30 sm:h-7 sm:w-20"
-          />
-
-          <motion.div
-            className="relative overflow-hidden rounded-2xl border-4 border-secondary bg-card shadow-xl"
-            style={{ y: imageY, rotate: imageRotate }}
-            whileHover={{ rotate: 0 }}
-          >
-            {/*
-              Cover image: prefer the active event's fotoCover (a relative
-              path like /uploads/cover-xxx.jpg) when available, otherwise
-              fall back to the bundled hero-volunteers.jpg placeholder.
-              Using a plain <img> because next/image would need width/height
-              config that's overkill for a single hero shot — and fotoCover
-              paths are dynamic at runtime.
-            */}
-            <img
-              src={activeEvent?.fotoCover && activeEvent.fotoCover.trim() !== "" ? activeEvent.fotoCover : "/hero-volunteers.jpg"}
-              alt="Relawan Saratrasaa beraksi di lapangan"
-              className="aspect-[4/3] h-full w-full object-cover"
-              loading="eager"
-              decoding="async"
-            />
-          </motion.div>
+          <StackedPhotoGallery />
         </motion.div>
       </div>
-
-      {/* Scroll-down indicator — a small bouncing mouse + chevron at the
-          bottom of the hero. Purely cosmetic; hidden under reduced-motion. */}
-      <ScrollIndicator />
     </section>
   );
 }

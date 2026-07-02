@@ -161,31 +161,10 @@
   }
 }
 
-/* ============================================================
-   Signature element — Ticket stub (perforated ticket, brief §2.5)
-   ============================================================ */
-.ticket-stub {
-  position: relative;
-  background:
-    radial-gradient(circle at 0 50%, transparent 8px, var(--card) 8px) left center / 16px 16px repeat-y,
-    radial-gradient(circle at 100% 50%, transparent 8px, var(--card) 8px) right center / 16px 16px repeat-y;
-}
-.ticket-perf {
-  border-left: 2px dashed var(--pink-soft);
-  position: relative;
-}
-.ticket-perf::before,
-.ticket-perf::after {
-  content: "";
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  background: var(--background);
-  border-radius: 9999px;
-  left: -10px;
-}
-.ticket-perf::before { top: -10px; }
-.ticket-perf::after { bottom: -10px; }
+  /* ============================================================
+     Signature element — Ticket stub (perforated ticket, brief 2.5)
+     REMOVED: Now handled entirely by Tailwind in TicketCard.tsx for cleaner edges
+     ============================================================ */
 
 /* Custom scrollbar for long lists */
 .scroll-soft::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -527,22 +506,22 @@ button[class~="bg-primary"]:not(:disabled):active {
    photos (we render a static <img> version for print instead).
 */
 @media print {
-  /* Hide everything on the page. */
-  body * {
-    visibility: hidden;
+  /* For the new portal-based print strategy, we hide the main Next.js root 
+     and any other body children, except the portal wrapper for printing. */
+  body > *:not(.print-portal-wrapper) {
+    display: none !important;
   }
-  /* But make the recap-print-area and all its descendants visible. */
+  .print-portal-wrapper {
+    display: block !important;
+    position: static !important;
+  }
   .recap-print-area,
   .recap-print-area * {
     visibility: visible;
   }
-  /* Reposition the recap-print-area to the top-left of the print page,
-     full width, no max-height/overflow constraints so the entire recap
-     content (which may be taller than the viewport) prints cleanly. */
+  /* Keep it static in print to allow normal browser pagination without overlaps */
   .recap-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static !important;
     width: 100%;
     max-width: none !important;
     max-height: none !important;
@@ -551,11 +530,6 @@ button[class~="bg-primary"]:not(:disabled):active {
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-  /* The `print:` Tailwind variant toggles `display: grid` for the static
-     <img> documentation photo grid inside RecapContent. Without this rule,
-     that grid stays `hidden` even in print because the base class is
-     `hidden print:grid`. Tailwind already emits the print variant, so this
-     is just a safety net for any browser that doesn't pick it up. */
   .recap-print-area .print\:grid {
     display: grid !important;
   }

@@ -28,32 +28,38 @@ export async function GET(req: NextRequest) {
 
     const rows = await db.pendaftar.findMany({
       where,
-      include: { event: { select: { judul: true, tanggal: true, lokasi: true } } },
+      include: { 
+        event: { select: { judul: true, tanggal: true, lokasi: true } },
+        peserta: { orderBy: { urutan: "asc" } }
+      },
       orderBy: { createdAt: "desc" },
     });
 
+    const origin = req.nextUrl.origin;
+
     // CSV headers
     const headers = [
-      "Kode Referensi",
-      "Nama",
-      "Kontak",
       "Event",
       "Tanggal Event",
-      "Lokasi",
+      "Lokasi Event",
+      "Kode Referensi",
+      "Pendaftar Utama",
+      "Kontak Pendaftar",
+      "Status Pembayaran",
       "Jumlah Orang",
-      "Harga Dasar",
-      "Kode Unik",
       "Total Bayar",
-      "Status",
-      "Bukti Transfer",
-      "Catatan Admin",
-      "Dibuat Pada",
-      "Diverifikasi Pada",
+      "Urutan Peserta",
+      "Nama Lengkap",
+      "Nama Panggilan",
+      "Umur",
+      "Alamat",
+      "Nomor WhatsApp",
+      "Instagram",
+      "Foto Diri URL",
     ];
 
     const escapeCsv = (val: unknown): string => {
       const s = val == null ? "" : String(val);
-      // Quote if contains comma, quote, or newline
       if (/[",\n]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`;
       }
@@ -63,24 +69,53 @@ export async function GET(req: NextRequest) {
     const csvLines: string[] = [];
     csvLines.push(headers.map(escapeCsv).join(","));
     for (const r of rows) {
-      const row = [
-        r.kodeReferensi,
-        r.nama,
-        r.kontak,
-        r.event.judul,
-        r.event.tanggal,
-        r.event.lokasi,
-        r.jumlahOrang,
-        r.hargaDasar,
-        r.kodeUnik,
-        r.totalBayar,
-        r.status,
-        r.buktiTransfer || "",
-        r.catatanAdmin || "",
-        r.createdAt.toISOString(),
-        r.verifiedAt ? r.verifiedAt.toISOString() : "",
-      ];
-      csvLines.push(row.map(escapeCsv).join(","));
+      if (r.peserta.length === 0) {
+        // Fallback for older entries without peserta rows
+        const row = [
+          r.event.judul,
+          r.event.tanggal,
+          r.event.lokasi,
+          r.kodeReferensi,
+          r.nama,
+          r.kontak,
+          r.status,
+          r.jumlahOrang,
+          r.totalBayar,
+          "", // Urutan
+          "", // Nama Lengkap
+          "", // Nama Panggilan
+          "", // Umur
+          "", // Alamat
+          "", // WA
+          "", // IG
+          "", // Foto
+        ];
+        csvLines.push(row.map(escapeCsv).join(","));
+      } else {
+        for (const p of r.peserta) {
+          const fotoUrl = p.fotoDiri ? `${origin}${p.fotoDiri.startsWith("/") ? "" : "/"}${p.fotoDiri}` : "";
+          const row = [
+            r.event.judul,
+            r.event.tanggal,
+            r.event.lokasi,
+            r.kodeReferensi,
+            r.nama,
+            r.kontak,
+            r.status,
+            r.jumlahOrang,
+            r.totalBayar,
+            p.urutan,
+            p.namaLengkap,
+            p.namaPanggilan,
+            p.umur || "",
+            p.alamat || "",
+            p.nomorWa,
+            p.instagram || "",
+            fotoUrl,
+          ];
+          csvLines.push(row.map(escapeCsv).join(","));
+        }
+      }
     }
 
     const csv = csvLines.join("\n");

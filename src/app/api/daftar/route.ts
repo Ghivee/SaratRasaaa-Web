@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { acquireLock, getClientIp } from "@/lib/security";
-import { generateKodeReferensi, generateKodeUnik } from "@/lib/saratrasa";
+import { generateKodeReferensi } from "@/lib/saratrasa";
 import { rateLimit } from "@/lib/rate-limit";
+import { createPayment } from "@/lib/yobasepay";
 
 /**
  * POST /api/daftar
@@ -12,7 +13,7 @@ import { rateLimit } from "@/lib/rate-limit";
  *   - peserta: array of 1–5 participants, each with:
  *     - namaLengkap: non-empty
  *     - namaPanggilan: non-empty
- *     - instagram: optional string
+ *     - instagram: non-empty string
  *     - nomorWa: Indonesian phone, ^(\+62|62|0)8[1-9][0-9]{6,11}$
  *
  * Race-condition protected: the entire quota-check + kode_unik generation +
@@ -36,6 +37,8 @@ const WA_RE = /^(\+62|62|0)8[1-9][0-9]{6,11}$/;
 interface PesertaInput {
   namaLengkap?: unknown;
   namaPanggilan?: unknown;
+  umur?: unknown;
+  alamat?: unknown;
   instagram?: unknown;
   nomorWa?: unknown;
 }
@@ -105,7 +108,19 @@ export async function POST(req: NextRequest) {
       }
       if (typeof p.namaPanggilan !== "string" || p.namaPanggilan.trim().length < 1) {
         return NextResponse.json(
-          { error: `${label}: Nama panggilan wajib diisi.` },
+          { error: `${label}: Nama panggilan wajib diisi (min. 1 karakter).` },
+          { status: 400 },
+        );
+      }
+      if (typeof p.umur !== "number" || Number.isNaN(p.umur) || p.umur < 5 || p.umur > 100) {
+        return NextResponse.json(
+          { error: `${label}: Umur wajib diisi (5 - 100 tahun).` },
+          { status: 400 },
+        );
+      }
+      if (typeof p.alamat !== "string" || p.alamat.trim().length < 3) {
+        return NextResponse.json(
+          { error: `${label}: Alamat wajib diisi (min. 3 karakter).` },
           { status: 400 },
         );
       }
@@ -115,10 +130,10 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      // instagram is optional but if provided must be a string
-      if (p.instagram !== undefined && p.instagram !== null && typeof p.instagram !== "string") {
+      // instagram is mandatory
+      if (typeof p.instagram !== "string" || p.instagram.trim().length < 1) {
         return NextResponse.json(
-          { error: `${label}: Instagram tidak valid.` },
+          { error: `${label}: Instagram wajib diisi.` },
           { status: 400 },
         );
       }
@@ -160,9 +175,19 @@ export async function POST(req: NextRequest) {
       }
 
       const kodeReferensi = await generateKodeReferensi();
-      const kodeUnik = await generateKodeUnik(event.id);
-      const hargaDasar = jml * event.harga;
-      const totalBayar = hargaDasar + kodeUnik;
+      const totalBayar = jml * event.harga;
+
+      // Panggil YoBasePay createpayment
+      const ybResult = await createPayment(totalBayar);
+      if (!ybResult.success) {
+        return NextResponse.json(
+          { error: `Gagal membuat transaksi pembayaran: ${ybResult.error}` },
+          { status: 502 },
+        );
+      }
+
+      const actualTotalBayar = ybResult.amount ?? totalBayar;
+      const kodeUnik = actualTotalBayar - totalBayar;
 
       // Use first peserta's data for the Pendaftar record (backward compat)
       const firstPeserta = pesertaList[0];
@@ -178,9 +203,11 @@ export async function POST(req: NextRequest) {
             nama: primaryNama,
             kontak: primaryWa,
             jumlahOrang: jml,
-            hargaDasar,
-            kodeUnik,
-            totalBayar,
+            hargaDasar: totalBayar,
+            kodeUnik: kodeUnik,
+            totalBayar: actualTotalBayar,
+            trxId: ybResult.trxId ?? null,
+            qrImageUrl: ybResult.qrImageUrl ?? null,
             status: "pending_payment",
           },
         }),
@@ -191,10 +218,9 @@ export async function POST(req: NextRequest) {
             urutan: idx + 1,
             namaLengkap: (p.namaLengkap as string).trim(),
             namaPanggilan: (p.namaPanggilan as string).trim(),
-            instagram:
-              p.instagram && typeof p.instagram === "string" && p.instagram.trim()
-                ? p.instagram.trim().replace(/^@/, "")
-                : null,
+            umur: p.umur as number,
+            alamat: (p.alamat as string).trim(),
+            instagram: (p.instagram as string).trim().replace(/^@/, ""),
             nomorWa: (p.nomorWa as string).trim(),
           })),
         }),
@@ -203,14 +229,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           kodeReferensi,
-          totalBayar,
-          hargaDasar,
-          kodeUnik,
+          totalBayar: actualTotalBayar,
           jumlahOrang: jml,
           eventJudul: event.judul,
           eventTanggal: event.tanggal,
           eventLokasi: event.lokasi,
           linkGrupWa: event.linkGrupWa || null,
+          trxId: ybResult.trxId ?? null,
+          qrImageUrl: ybResult.qrImageUrl ?? null,
+          expiredAt: ybResult.expiredAt ?? null,
         },
         { status: 201 },
       );

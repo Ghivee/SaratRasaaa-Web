@@ -4,8 +4,8 @@ import { db } from "@/lib/db";
 import { validateStatusLookup, getClientIp } from "@/lib/security";
 import { rateLimit } from "@/lib/rate-limit";
 
-type PendaftarWithEvent = Prisma.PendaftarGetPayload<{
-  include: { event: true };
+type PendaftarWithEventAndPeserta = Prisma.PendaftarGetPayload<{
+  include: { event: true, peserta: true };
 }>;
 
 /**
@@ -28,9 +28,9 @@ type PendaftarWithEvent = Prisma.PendaftarGetPayload<{
  */
 export async function GET(req: NextRequest) {
   try {
-    // Rate limit: 20 status checks per IP per 60 seconds (anti-brute-force).
+    // Rate limit: 60 status checks per IP per 60 seconds (anti-brute-force).
     const ip = getClientIp(req) || "unknown";
-    const rl = rateLimit(`cekstatus:${ip}`, 20, 60_000);
+    const rl = rateLimit(`cekstatus:${ip}`, 60, 60_000);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: "Terlalu banyak pencarian dari perangkat ini. Tunggu sebentar ya." },
@@ -44,37 +44,50 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const kode = sp.get("kode") || undefined;
     const kontak = sp.get("kontak") || undefined;
-    const nama = sp.get("nama") || undefined;
+    const otp = sp.get("otp") || undefined;
 
     const lookup = validateStatusLookup({
       kodeReferensi: kode,
       kontak,
-      namaDepan: nama,
+      otp,
     });
     if (!lookup.ok) {
       return NextResponse.json({ error: lookup.error }, { status: 400 });
     }
 
-    let pendaftar: PendaftarWithEvent | null = null;
+    let pendaftar: PendaftarWithEventAndPeserta | null = null;
 
     if (lookup.mode === "kode") {
       const kodeNorm = (kode as string).trim().toUpperCase();
       pendaftar = await db.pendaftar.findUnique({
         where: { kodeReferensi: kodeNorm },
-        include: { event: true },
+        include: { event: true, peserta: true },
       });
-    } else if (lookup.mode === "kombinasi") {
+    } else if (lookup.mode === "otp") {
       const kontakNorm = (kontak as string).trim();
-      const namaNorm = (nama as string).trim();
-      // SQLite doesn't support `mode: "insensitive"`; rely on `startsWith`
-      // for the nama depan. Take the most recent match if multiple exist.
-      pendaftar = await db.pendaftar.findFirst({
+      const otpNorm = (otp as string).trim();
+
+      // Verify OTP in db
+      const validOtp = await db.otpVerification.findFirst({
         where: {
-          kontak: kontakNorm,
-          nama: { startsWith: namaNorm },
-        },
+          nomorWa: kontakNorm,
+          otp: otpNorm,
+          expiresAt: { gt: new Date() }
+        }
+      });
+
+      if (!validOtp) {
+        return NextResponse.json(
+          { error: "Kode OTP tidak valid atau sudah kedaluwarsa." },
+          { status: 400 },
+        );
+      }
+
+      // Take the most recent match if multiple exist
+      pendaftar = await db.pendaftar.findFirst({
+        where: { kontak: kontakNorm },
         orderBy: { createdAt: "desc" },
-        include: { event: true },
+        include: { event: true, peserta: true },
       });
     }
 
@@ -107,6 +120,11 @@ export async function GET(req: NextRequest) {
             tanggal: pendaftar.event.tanggal,
             lokasi: pendaftar.event.lokasi,
           },
+          peserta: pendaftar.peserta.map(p => ({
+            id: p.id,
+            namaLengkap: p.namaLengkap,
+            fotoDiriUrl: p.fotoDiriUrl,
+          })),
         },
       },
       { status: 200 },

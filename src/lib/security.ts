@@ -255,19 +255,19 @@ function sniffMagic(b64: string): string | null {
 export interface StatusLookupQuery {
   kodeReferensi?: string;
   kontak?: string;
-  namaDepan?: string;
+  otp?: string;
 }
 
 /**
  * Validate a cek-status query for IDOR safety.
  * Either:
  *   (a) kode_referensi is provided (random, unguessable), OR
- *   (b) BOTH kontak AND nama_depan are provided (so random HP guessing fails).
+ *   (b) BOTH kontak AND otp are provided (verified ownership via WA).
  */
 export function validateStatusLookup(q: StatusLookupQuery): {
   ok: boolean;
   error?: string;
-  mode: "kode" | "kombinasi" | "none";
+  mode: "kode" | "otp" | "none";
 } {
   const kode = q.kodeReferensi?.trim().toUpperCase();
   if (kode && /^SRT-[A-Z0-9]{6}$/.test(kode)) {
@@ -275,15 +275,15 @@ export function validateStatusLookup(q: StatusLookupQuery): {
   }
 
   const kontak = q.kontak?.trim();
-  const nama = q.namaDepan?.trim();
-  if (kontak && nama && kontak.length >= 8 && nama.length >= 2) {
-    return { ok: true, mode: "kombinasi" };
+  const otp = q.otp?.trim();
+  if (kontak && otp && kontak.length >= 8 && otp.length === 6) {
+    return { ok: true, mode: "otp" };
   }
 
   return {
     ok: false,
     mode: "none",
     error:
-      "Wajib isi kode referensi (format SRT-XXXXXX), ATAU nomor HP + nama depan bersamaan. Pencarian hanya dengan nomor HP tidak diizinkan demi privasi data.",
+      "Wajib isi kode referensi (format SRT-XXXXXX), ATAU nomor HP beserta OTP dari WhatsApp.",
   };
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { validateStatusLookup, getClientIp } from "@/lib/security";
+import { getClientIp } from "@/lib/security";
 import { rateLimit } from "@/lib/rate-limit";
 
 type PendaftarWithEvent = Prisma.PendaftarGetPayload<{
@@ -9,10 +9,10 @@ type PendaftarWithEvent = Prisma.PendaftarGetPayload<{
 }>;
 
 /**
- * GET /api/volunteer-history?kontak=...&nama=...
+ * GET /api/volunteer-history?kontak=...&otp=...
  *
  * Returns the FULL registration history for a volunteer identified by the
- * (kontak + nama depan) combination. Same IDOR-safe validation as
+ * (kontak + otp) combination. Same IDOR-safe validation as
  * /api/cek-status — HP-only search is rejected. Enforced by
  * `validateStatusLookup` from src/lib/security.ts (security fix #5).
  *
@@ -33,7 +33,7 @@ type PendaftarWithEvent = Prisma.PendaftarGetPayload<{
  *   }
  *
  * Response 400: invalid lookup query (HP-only, or missing params) — `error`
- * Response 404: no records found for this kontak + nama — `error`
+ * Response 404: no records found for this kontak + otp — `error`
  * Response 429: rate-limited — `error` + Retry-After header
  * Response 500: unexpected server error
  */
@@ -55,41 +55,28 @@ export async function GET(req: NextRequest) {
     }
 
     const sp = req.nextUrl.searchParams;
-    const kontak = sp.get("kontak") || undefined;
-    const nama = sp.get("nama") || undefined;
+    const kontak = sp.get("kontak") || "";
+    const nama = sp.get("nama") || "";
 
-    // IDOR-safe validation — same primitive as /api/cek-status.
-    // `validateStatusLookup` accepts kode OR (kontak + nama). We pass kode as
-    // undefined so the only valid mode here is "kombinasi". HP-only searches
-    // are rejected at this layer (returns ok:false with a clear error).
-    const lookup = validateStatusLookup({
-      kodeReferensi: undefined,
-      kontak,
-      namaDepan: nama,
-    });
-    if (!lookup.ok) {
-      return NextResponse.json({ error: lookup.error }, { status: 400 });
-    }
+    const kontakNorm = kontak.trim();
+    const namaNorm = nama.trim().toLowerCase();
 
-    // The validator only returns "kombinasi" or "none" here (kode is undefined).
-    // The `lookup.mode === "kode"` branch is unreachable in this route, but we
-    // guard defensively in case the validator is ever loosened.
-    if (lookup.mode !== "kombinasi") {
+    if (!kontakNorm || !namaNorm || namaNorm.length < 2) {
       return NextResponse.json(
-        { error: "Pencarian riwayat wajib menggunakan nomor HP + nama depan." },
+        { error: "Pencarian riwayat wajib menggunakan nomor HP dan nama lengkap (minimal 2 karakter)." },
         { status: 400 },
       );
     }
 
-    const kontakNorm = (kontak as string).trim();
-    const namaNorm = (nama as string).trim();
-
-    // Fetch ALL pendaftar records matching kontak + nama-depan prefix,
+    // Fetch ALL pendaftar records matching kontak prefix,
     // sorted by createdAt desc so the most recent registration shows first.
     const records = await db.pendaftar.findMany({
       where: {
         kontak: kontakNorm,
-        nama: { startsWith: namaNorm },
+        nama: {
+          contains: namaNorm,
+          mode: "insensitive"
+        }
       },
       orderBy: { createdAt: "desc" },
       include: { event: true },

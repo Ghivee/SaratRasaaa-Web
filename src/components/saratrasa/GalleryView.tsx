@@ -17,20 +17,7 @@ import { RevealOnScroll } from "./RevealOnScroll";
 import { SectionDivider } from "./SectionDivider";
 import { PhotoLightbox } from "./PhotoLightbox";
 
-/**
- * GalleryItem — shape returned by GET /api/gallery.
- * Kept local (not in shared types.ts) because this view is the only consumer
- * and the API contract is documented in /api/gallery/route.ts.
- */
-interface GalleryItem {
-  id: string;
-  judul: string;
-  tanggal: string; // YYYY-MM-DD
-  lokasi: string;
-  recap: string | null;
-  fotoDok: string[];
-  fotoCover: string | null;
-}
+import type { GalleryItem } from "@/components/saratrasa/types";
 
 function formatTanggal(iso: string): string {
   try {
@@ -132,11 +119,11 @@ function StoryCard({ item }: { item: GalleryItem }) {
             {formatTanggal(item.tanggal)}
           </span>
           <span
-            className="inline-flex items-center rounded-full bg-[var(--success)]/15 px-3 py-1 text-xs font-semibold text-[var(--success)] ring-1 ring-inset ring-[var(--success)]/30 animate-ring-pulse"
+            className="inline-flex h-6 items-center justify-center gap-1.5 rounded-full bg-[var(--success)]/15 px-3 text-xs font-semibold text-[var(--success)] ring-1 ring-inset ring-[var(--success)]/30 animate-ring-pulse"
             title="Event telah selesai"
           >
-            <span className="size-1.5 rounded-full bg-[var(--success)]" aria-hidden />
-            Selesai
+            <span className="shrink-0 size-1.5 rounded-full bg-[var(--success)]" aria-hidden />
+            <span>Selesai</span>
           </span>
         </header>
 
@@ -331,30 +318,8 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-export function GalleryView() {
-  const [items, setItems] = React.useState<GalleryItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/gallery", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { events: GalleryItem[] };
-        if (!cancelled) setItems(data.events ?? []);
-      } catch (e) {
-        console.error("[GalleryView] fetch failed", e);
-        if (!cancelled) setError("Gagal memuat galeri. Coba lagi nanti.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+export function GalleryView({ items = [], loading = false }: { items?: GalleryItem[], loading?: boolean }) {
+  const error = null; // Removed internal error state since we fall back to empty array
 
   return (
     <section className="container mx-auto px-4 py-8 md:py-12">
@@ -374,7 +339,7 @@ export function GalleryView() {
             Galeri Kegiatan
           </h1>
           <p className="mt-3 text-base md:text-lg text-muted-foreground">
-            Setiap cerita, setiap bekas kaki, setiap karung plastik. Inilah
+            Setiap cerita, setiap senyum, setiap langkah kecil. Inilah
             jejak Saratrasaa.
           </p>
         </header>

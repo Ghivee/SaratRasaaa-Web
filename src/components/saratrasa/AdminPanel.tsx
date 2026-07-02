@@ -28,7 +28,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck,
   Lock,
@@ -64,7 +64,20 @@ import {
   CalendarDays,
   History,
   Bell,
+  Menu,
+  Copy,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet";
 
 // Recharts is installed at v2.15.4 — fully client-side via ResponsiveContainer.
 // We gate the chart render behind a `mounted` state (set in useEffect) to
@@ -138,10 +151,13 @@ import { ImageDropZone } from "./ImageDropZone";
 import { RecapModal } from "./RecapModal";
 import { NotificationDialog } from "./NotificationDialog";
 import { AdminEventDetailModal } from "./AdminEventDetailModal";
+import { CheckInReport } from "./CheckInReport";
 import { CheckInDialog } from "./CheckInDialog";
 import { RemindersTab } from "./RemindersTab";
-import { QuickActions } from "./QuickActions";
 import { fireVerifyConfetti } from "@/lib/confetti";
+import { AdminKeuangan } from "./AdminKeuangan";
+import { AdminTestimoni } from "./AdminTestimoni";
+import { PhotoLightbox } from "./PhotoLightbox";
 
 interface AdminPanelProps {
   /**
@@ -309,6 +325,16 @@ interface PendaftarDetailData {
     harga: number;
     kuotaMax: number;
   };
+  peserta: {
+    urutan: number;
+    namaLengkap: string;
+    namaPanggilan: string;
+    umur: number | null;
+    alamat: string | null;
+    fotoDiri: string | null;
+    instagram: string | null;
+    nomorWa: string;
+  }[];
 }
 
 /** One row in the check-in recent list — matches /api/admin/check-in/recent. */
@@ -455,6 +481,17 @@ function formatWaktuWebhook(iso: string): string {
   }
 }
 
+function extractTrxId(rawPayload: string | null): string {
+  if (!rawPayload) return "—";
+  try {
+    const data = JSON.parse(rawPayload);
+    const trxId = data.trx_id || data.trxId || data.transaction_id || data.transactionId || data.id;
+    return trxId ? String(trxId) : "—";
+  } catch {
+    return "—";
+  }
+}
+
 /** Compact stat card for the dashboard grid. */
 function StatCard({
   icon: Icon,
@@ -462,12 +499,14 @@ function StatCard({
   value,
   color,
   pulse,
+  description,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   color: "pink" | "amber" | "green";
   pulse?: boolean;
+  description?: string;
 }) {
   const colorClasses =
     color === "pink"
@@ -500,7 +539,12 @@ function StatCard({
         ) : null}
       </div>
       <div className="mt-3 font-mono text-2xl font-bold truncate">{value}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+      <div className="text-xs text-muted-foreground mt-0.5 font-medium">{label}</div>
+      {description && (
+        <div className="text-[10.5px] text-muted-foreground/75 leading-tight mt-1.5">
+          {description}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -509,7 +553,9 @@ const EMPTY_FORM = {
   judul: "",
   deskripsi: "",
   tanggal: "",
+  waktuMulai: "",
   lokasi: "",
+  linkGmaps: "",
   harga: "",
   kuotaMax: "",
   status: "upcoming" as AdminEventItem["status"],
@@ -533,18 +579,93 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     if (typeof window === "undefined") return null;
     return getCookie(ADMIN_COOKIE_NAME);
   });
+  const [tokenExpiresAt, setTokenExpiresAt] = React.useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const exp = localStorage.getItem("saratrasaa-admin-exp");
+    return exp && getCookie(ADMIN_COOKIE_NAME) ? parseInt(exp, 10) : null;
+  });
+  const [timeLeft, setTimeLeft] = React.useState<string>("60:00");
+
+  React.useEffect(() => {
+    if (!tokenExpiresAt) return;
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, tokenExpiresAt - Date.now());
+      if (remaining === 0) {
+        clearInterval(interval);
+        handleLogout();
+        toast.error("Sesi telah habis, silakan login ulang.");
+      } else {
+        const m = Math.floor(remaining / 60000).toString().padStart(2, "0");
+        const s = Math.floor((remaining % 60000) / 1000).toString().padStart(2, "0");
+        setTimeLeft(`${m}:${s}`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [tokenExpiresAt]);
+
   const [tokenDraft, setTokenDraft] = React.useState("");
+  const [isVerifyingToken, setIsVerifyingToken] = React.useState(false);
 
   // ----- Tab state -----
   const [activeTab, setActiveTab] = React.useState<
     | "dashboard"
     | "events"
     | "pendaftar"
+    | "keuangan"
     | "history"
     | "webhook"
     | "checkin"
     | "reminders"
-  >("dashboard");
+    | "testimoni"
+  >(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.replace("#", "");
+      if (
+        hash === "dashboard" ||
+        hash === "events" ||
+        hash === "pendaftar" ||
+        hash === "keuangan" ||
+        hash === "history" ||
+        hash === "webhook" ||
+        hash === "checkin" ||
+        hash === "reminders" ||
+        hash === "testimoni"
+      ) {
+        return hash as any;
+      }
+    }
+    return "dashboard";
+  });
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.hash !== `#${activeTab}`) {
+        url.hash = activeTab;
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (
+        hash === "dashboard" ||
+        hash === "events" ||
+        hash === "pendaftar" ||
+        hash === "history" ||
+        hash === "webhook" ||
+        hash === "checkin" ||
+        hash === "reminders" ||
+        hash === "testimoni"
+      ) {
+        setActiveTab(hash as any);
+      }
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
   // ----- Events list state (Tab 1) -----
   const [events, setEvents] = React.useState<AdminEventItem[]>([]);
@@ -557,12 +678,35 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   const [form, setForm] = React.useState({ ...EMPTY_FORM });
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [eventToDelete, setEventToDelete] = React.useState<AdminEventItem | null>(null);
+  const [lightboxData, setLightboxData] = React.useState<{ urls: string[], fileNames: string[], activeIndex: number } | null>(null);
+  const lightboxDataRef = React.useRef(lightboxData);
+  React.useEffect(() => {
+    lightboxDataRef.current = lightboxData;
+  }, [lightboxData]);
 
   // ----- History form state (Tab 2) -----
   const [selectedHistoryEventId, setSelectedHistoryEventId] = React.useState("");
   const [recap, setRecap] = React.useState("");
   const [historyPhotos, setHistoryPhotos] = React.useState<File[]>([]);
+  const [existingDokFotos, setExistingDokFotos] = React.useState<string[]>([]);
   const [historySubmitting, setHistorySubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (selectedHistoryEventId) {
+      const event = events.find((e) => e.id === selectedHistoryEventId);
+      if (event) {
+        setRecap(event.recap || "");
+        const parsedPhotos = typeof event.fotoDok === "string"
+          ? (event.fotoDok ? event.fotoDok.split(",").map(s => s.trim()).filter(Boolean) : [])
+          : (Array.isArray(event.fotoDok) ? event.fotoDok : []);
+        setExistingDokFotos(parsedPhotos);
+      }
+    } else {
+      setRecap("");
+      setExistingDokFotos([]);
+    }
+  }, [selectedHistoryEventId, events]);
 
   // ----- Recap modal state (Tab 2 — Dokumentasi History) -----
   // When non-null, the RecapModal is open for that event id. The modal
@@ -597,10 +741,15 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     idEvent: string;
     status: string;
   }>({ idEvent: "", status: "" });
+  const [pendaftarPage, setPendaftarPage] = React.useState(1);
+  const PENDAFTAR_PER_PAGE = 20;
   const [pendaftarActionLoading, setPendaftarActionLoading] = React.useState<string | null>(null);
   const [rejectDialog, setRejectDialog] = React.useState<{
     kodeReferensi: string;
     nama: string;
+  } | null>(null);
+  const [verifyDialog, setVerifyDialog] = React.useState<{
+    kodeReferensi: string;
   } | null>(null);
   const [rejectCatatan, setRejectCatatan] = React.useState("");
 
@@ -609,6 +758,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   // bulkActionLoading gates both bulk buttons while a request is in-flight.
   // bulkRejectDialog controls the bulk-reject confirmation dialog (with catatan).
   const [selectedKodes, setSelectedKodes] = React.useState<Set<string>>(new Set());
+  const [logoutDialog, setLogoutDialog] = React.useState(false);
   const [bulkActionLoading, setBulkActionLoading] = React.useState<"verify" | "reject" | null>(null);
   const [bulkRejectOpen, setBulkRejectOpen] = React.useState(false);
   const [bulkRejectCatatan, setBulkRejectCatatan] = React.useState("");
@@ -643,7 +793,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   // The admin opens it via the "Buat Pesan Notifikasi" button in the
   // pendaftar detail modal (verified pendaftar only) or the MessageCircle
   // icon button in the pendaftar table row (verified pendaftar only).
-  const [notifyKode, setNotifyKode] = React.useState<string | null>(null);
+  const [notifyKodes, setNotifyKodes] = React.useState<string[] | null>(null);
 
   // ----- Event detail analytics modal state (Task 9-C) -----
   // When non-null, the EventDetailModal is open for that event id. The
@@ -717,6 +867,16 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     );
   }, [pendaftarList, pendaftarSearch]);
 
+  React.useEffect(() => {
+    setPendaftarPage(1);
+  }, [pendaftarSearch, pendaftarFilters]);
+
+  const paginatedPendaftar = React.useMemo(() => {
+    const start = (pendaftarPage - 1) * PENDAFTAR_PER_PAGE;
+    return filteredPendaftar.slice(start, start + PENDAFTAR_PER_PAGE);
+  }, [filteredPendaftar, pendaftarPage]);
+  const totalPendaftarPages = Math.ceil(filteredPendaftar.length / PENDAFTAR_PER_PAGE);
+
   /**
    * Drop any selected kode that no longer exists in the current list
    * (e.g. after a filter change or after a bulk action refreshed the list).
@@ -740,19 +900,19 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   /** Derived: how many of the *currently visible* rows are selected. */
   const visibleSelectedCount = React.useMemo(() => {
     let n = 0;
-    for (const p of filteredPendaftar) {
+    for (const p of paginatedPendaftar) {
       if (selectedKodes.has(p.kodeReferensi)) n += 1;
     }
     return n;
-  }, [filteredPendaftar, selectedKodes]);
+  }, [paginatedPendaftar, selectedKodes]);
 
   /** Derived: are all visible (filterable) rows selected? "indeterminate" if some. */
   const allVisibleSelected =
-    filteredPendaftar.length > 0 &&
-    filteredPendaftar.every((p) => selectedKodes.has(p.kodeReferensi));
+    paginatedPendaftar.length > 0 &&
+    paginatedPendaftar.every((p) => selectedKodes.has(p.kodeReferensi));
   const someVisibleSelected =
     !allVisibleSelected &&
-    filteredPendaftar.some((p) => selectedKodes.has(p.kodeReferensi));
+    paginatedPendaftar.some((p) => selectedKodes.has(p.kodeReferensi));
 
   /** Of the selected kodes, how many are *eligible* for bulk action (pending). */
   const selectedPendingCount = React.useMemo(() => {
@@ -780,9 +940,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       const next = new Set(prev);
       if (allVisibleSelected) {
         // Deselect all currently-visible rows (leave hidden ones alone).
-        for (const p of filteredPendaftar) next.delete(p.kodeReferensi);
+        for (const p of paginatedPendaftar) next.delete(p.kodeReferensi);
       } else {
-        for (const p of filteredPendaftar) next.add(p.kodeReferensi);
+        for (const p of paginatedPendaftar) next.add(p.kodeReferensi);
       }
       return next;
     });
@@ -795,24 +955,50 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   /* ------------------------------------------------------------------ */
   /* Token gate submit / logout                                         */
   /* ------------------------------------------------------------------ */
-  function handleTokenSubmit(e: React.FormEvent) {
+  async function handleTokenSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isVerifyingToken) return;
+
     const t = tokenDraft.trim();
     if (!t) {
       toast.error("Token tidak boleh kosong.");
       return;
     }
-    // No API call here — the token is verified lazily on the first real
-    // action (the auto-fetch on Layer 2 mount). Store in state and cookie.
-    setToken(t);
-    setCookie(ADMIN_COOKIE_NAME, t, ADMIN_COOKIE_MAX_AGE);
-    setTokenDraft("");
-    toast.success("Token disimpan untuk sesi ini. Cookie berlaku 1 jam.");
+
+    setIsVerifyingToken(true);
+    try {
+      // Verify token stealthily before actually entering the dashboard
+      const res = await adminFetch("/api/admin/stats", t, { method: "GET" });
+      if (res.status === 401) {
+        toast.error("Token tidak valid.");
+        setTokenDraft("");
+        return;
+      }
+      if (!res.ok) {
+        toast.error("Gagal terhubung ke server.");
+        return;
+      }
+
+      setToken(t);
+      setCookie(ADMIN_COOKIE_NAME, t, ADMIN_COOKIE_MAX_AGE);
+      const exp = Date.now() + ADMIN_COOKIE_MAX_AGE * 1000;
+      setTokenExpiresAt(exp);
+      localStorage.setItem("saratrasaa-admin-exp", exp.toString());
+      setTokenDraft("");
+      toast.success("Token disimpan untuk sesi ini. Cookie berlaku 1 jam.");
+    } catch (err) {
+      toast.error("Terjadi kesalahan saat memverifikasi token.");
+    } finally {
+      setIsVerifyingToken(false);
+    }
   }
 
   function handleLogout() {
+
     setToken(null);
+    setTokenExpiresAt(null);
     deleteCookie(ADMIN_COOKIE_NAME);
+    localStorage.removeItem("saratrasaa-admin-exp");
     setEvents([]);
     setForm({ ...EMPTY_FORM });
     setEditingId(null);
@@ -825,6 +1011,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     setPendaftarFilters({ idEvent: "", status: "" });
     setPendaftarActionLoading(null);
     setRejectDialog(null);
+    setVerifyDialog(null);
     setRejectCatatan("");
     setSelectedKodes(new Set());
     setBulkActionLoading(null);
@@ -842,7 +1029,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     setPendaftarDetail(null);
     setPendaftarDetailLoading(null);
     setRecapEventId(null);
-    setNotifyKode(null);
+    setNotifyKodes(null);
     setDetailEventId(null);
     setStatusDistribution([]);
     setStatusDistributionLoading(false);
@@ -859,11 +1046,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   /* ------------------------------------------------------------------ */
   /* Fetch events — on Layer 2 mount + when Tab 1 regains focus         */
   /* ------------------------------------------------------------------ */
-  const fetchEvents = React.useCallback(async () => {
+  const fetchEvents = React.useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
     setEventsLoading(true);
     try {
-      const res = await adminFetch("/api/admin/event", token, { method: "GET" });
+      const res = await adminFetch("/api/admin/event", token, { method: "GET", signal });
       if (res.status === 401) {
         toast.error("Token tidak valid.");
         handleLogout();
@@ -877,6 +1064,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       const data = (await res.json()) as { events: AdminEventItem[] };
       setEvents(data.events);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       toast.error("Gagal memuat event: " + (err as Error).message);
     } finally {
       setEventsLoading(false);
@@ -884,20 +1072,22 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   }, [token]);
 
   React.useEffect(() => {
-    // Events list also feeds the Pendaftar tab's event filter — fetch on both.
-    if (token && (activeTab === "events" || activeTab === "pendaftar")) {
-      void fetchEvents();
+    const controller = new AbortController();
+    // Events list also feeds the Pendaftar, Keuangan, and History tabs — fetch on these.
+    if (token && (activeTab === "events" || activeTab === "pendaftar" || activeTab === "keuangan" || activeTab === "history")) {
+      void fetchEvents(controller.signal);
     }
+    return () => controller.abort();
   }, [token, activeTab, fetchEvents]);
 
   /* ------------------------------------------------------------------ */
   /* Fetch dashboard stats — on Layer 2 mount + when Dashboard is active */
   /* ------------------------------------------------------------------ */
-  const fetchStats = React.useCallback(async () => {
+  const fetchStats = React.useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
     setDashboardLoading(true);
     try {
-      const res = await adminFetch("/api/admin/stats", token, { method: "GET" });
+      const res = await adminFetch("/api/admin/stats", token, { method: "GET", signal });
       if (res.status === 401) {
         toast.error("Token tidak valid.");
         handleLogout();
@@ -914,6 +1104,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       setDashboardStats(data.stats);
       setLastUpdated(new Date());
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       toast.error("Gagal memuat statistik: " + (err as Error).message);
     } finally {
       setDashboardLoading(false);
@@ -921,9 +1112,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
   }, [token]);
 
   React.useEffect(() => {
+    const controller = new AbortController();
     if (token && activeTab === "dashboard") {
-      void fetchStats();
+      void fetchStats(controller.signal);
     }
+    return () => controller.abort();
   }, [token, activeTab, fetchStats]);
 
   /* ------------------------------------------------------------------ */
@@ -1375,7 +1568,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       } else if (data.failed.length > 0) {
         toast.warning(
           `${data.updated} pendaftar ${action === "verify" ? "terverifikasi" : "ditolak"}. ` +
-            `${data.failed.length} dilewati (status bukan pending).`,
+          `${data.failed.length} dilewati (status bukan pending).`,
         );
       } else {
         toast.success(
@@ -1512,7 +1705,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       judul: ev.judul,
       deskripsi: ev.deskripsi,
       tanggal: ev.tanggal,
+      waktuMulai: ev.waktuMulai || "",
       lokasi: ev.lokasi,
+      linkGmaps: ev.linkGmaps || "",
       harga: String(ev.harga),
       kuotaMax: String(ev.kuotaMax),
       status: ev.status,
@@ -1556,7 +1751,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
         judul: form.judul.trim(),
         deskripsi: form.deskripsi.trim(),
         tanggal: form.tanggal,
+        waktuMulai: form.waktuMulai || null,
         lokasi: form.lokasi.trim(),
+        linkGmaps: form.linkGmaps.trim() || null,
         harga,
         kuotaMax,
         status: form.status,
@@ -1589,6 +1786,37 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       toast.error("Gagal menyimpan event: " + (err as Error).message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function confirmDeleteEvent() {
+    const ev = eventToDelete;
+    if (!ev || !token) return;
+    try {
+      const res = await adminFetch(
+        `/api/admin/event?id=${encodeURIComponent(ev.id)}`,
+        token,
+        { method: "DELETE" },
+      );
+      if (res.status === 401) {
+        toast.error("Sesi telah habis, silakan login ulang.");
+        handleLogout();
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Gagal menghapus event." }));
+        toast.error(data.error || "Gagal menghapus event.");
+        setEventToDelete(null);
+        return;
+      }
+
+      toast.success("Event berhasil dihapus.");
+      resetForm();
+      await fetchEvents();
+    } catch (err) {
+      toast.error("Gagal menghapus event: " + (err as Error).message);
+    } finally {
+      setEventToDelete(null);
     }
   }
 
@@ -1642,6 +1870,75 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     };
   }, [historyPreviews]);
 
+  async function handleDeletePhoto(photoUrl: string) {
+    if (!token || !selectedHistoryEventId) return;
+    if (!confirm("Hapus foto ini secara permanen?")) return;
+
+    try {
+      const res = await adminFetch("/api/admin/history", token, {
+        method: "DELETE",
+        body: JSON.stringify({
+          idEvent: selectedHistoryEventId,
+          photoUrl,
+        }),
+      });
+
+      if (res.status === 401) {
+        toast.error("Token tidak valid.");
+        handleLogout();
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Gagal menghapus foto." }));
+        toast.error(data.error || "Gagal menghapus foto.");
+        return;
+      }
+
+      toast.success("Foto berhasil dihapus.");
+      setExistingDokFotos((prev) => prev.filter((url) => url !== photoUrl));
+      await fetchEvents(); // Refresh data from server
+    } catch (err) {
+      toast.error("Gagal menghapus foto: " + (err as Error).message);
+    }
+  }
+
+  async function handleDeleteHistory() {
+    if (!token || !selectedHistoryEventId) return;
+    if (!confirm("Yakin ingin menghapus SELURUH dokumentasi (recap dan semua foto) untuk event ini secara permanen?")) return;
+
+    setHistorySubmitting(true);
+    try {
+      const res = await adminFetch("/api/admin/history", token, {
+        method: "DELETE",
+        body: JSON.stringify({
+          idEvent: selectedHistoryEventId,
+        }),
+      });
+
+      if (res.status === 401) {
+        toast.error("Token tidak valid.");
+        handleLogout();
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Gagal menghapus dokumentasi." }));
+        toast.error(data.error || "Gagal menghapus dokumentasi.");
+        return;
+      }
+
+      toast.success("Seluruh dokumentasi berhasil dihapus.");
+      setRecap("");
+      setHistoryPhotos([]);
+      setExistingDokFotos([]);
+      setSelectedHistoryEventId("");
+      await fetchEvents(); // Refresh data from server
+    } catch (err) {
+      toast.error("Gagal menghapus dokumentasi: " + (err as Error).message);
+    } finally {
+      setHistorySubmitting(false);
+    }
+  }
+
   async function handleHistorySubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
@@ -1650,7 +1947,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     if (recap.length > MAX_RECAP_LEN) {
       return toast.error(`Recap maksimal ${MAX_RECAP_LEN} karakter.`);
     }
-    if (historyPhotos.length === 0) return toast.error("Pilih minimal 1 foto.");
+    if (historyPhotos.length + existingDokFotos.length === 0) {
+      return toast.error("Pilih minimal 1 foto.");
+    }
 
     setHistorySubmitting(true);
     try {
@@ -1682,6 +1981,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       setRecap("");
       setHistoryPhotos([]);
       setSelectedHistoryEventId("");
+      await fetchEvents(); // Refresh data from server
     } catch (err) {
       toast.error("Gagal menyimpan dokumentasi: " + (err as Error).message);
     } finally {
@@ -1731,8 +2031,8 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="bg-pink-primary hover:bg-pink-primary/90">
-                  Masuk
+                <Button type="submit" disabled={isVerifyingToken} className="bg-pink-primary hover:bg-pink-primary/90">
+                  {isVerifyingToken ? <Loader2 className="size-4 animate-spin" /> : "Masuk"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center mt-1">
                   Token disimpan di cookie (1 jam). Klik "Keluar" untuk menghapus.
@@ -1758,14 +2058,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
             <span className="font-display font-semibold">Panel Pengelola</span>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="secondary" className="gap-1.5">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-success" />
-              </span>
-              Token aktif
+            <Badge variant="outline" className="gap-1.5 font-mono bg-background text-muted-foreground">
+              <Clock className="size-3.5" />
+              {timeLeft}
             </Badge>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
+            <Button variant="outline" size="sm" onClick={() => setLogoutDialog(true)}>
               <LogOut className="size-4" />
               Keluar
             </Button>
@@ -1779,31 +2076,130 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
           onValueChange={(v) =>
             setActiveTab(
               v as
-                | "dashboard"
-                | "events"
-                | "pendaftar"
-                | "history"
-                | "webhook"
-                | "checkin"
-                | "reminders",
+              | "dashboard"
+              | "events"
+              | "pendaftar"
+              | "keuangan"
+              | "history"
+              | "webhook"
+              | "checkin"
+              | "reminders"
+              | "testimoni"
             )
           }
         >
-          <TabsList>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="events">Kelola Event</TabsTrigger>
-            <TabsTrigger value="pendaftar">Pendaftar</TabsTrigger>
-            <TabsTrigger value="history">Dokumentasi History</TabsTrigger>
-            <TabsTrigger value="webhook">Webhook Logs</TabsTrigger>
-            <TabsTrigger value="checkin" className="gap-1.5">
-              <QrCode className="size-3.5" />
-              Check-in
-            </TabsTrigger>
-            <TabsTrigger value="reminders" className="gap-1.5">
-              <Bell className="size-3.5" />
-              Pengingat
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full mb-4">
+            <TabsList className="hidden md:flex flex-wrap w-full justify-start h-auto gap-1 p-1">
+              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+              <TabsTrigger value="events">Kelola Event</TabsTrigger>
+              <TabsTrigger value="pendaftar">Pendaftar</TabsTrigger>
+              <TabsTrigger value="testimoni">Testimoni</TabsTrigger>
+              <TabsTrigger value="history">Dokumentasi History</TabsTrigger>
+              <TabsTrigger value="webhook">Payment History</TabsTrigger>
+              <TabsTrigger value="checkin" className="gap-1.5">
+                <QrCode className="size-3.5" />
+                Check-in
+              </TabsTrigger>
+              <TabsTrigger value="keuangan" className="gap-1.5">
+                <Wallet className="size-3.5" />
+                Keuangan
+              </TabsTrigger>
+              <TabsTrigger value="reminders" className="gap-1.5">
+                <Bell className="size-3.5" />
+                Pengingat
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Mobile Nav via floating Sheet */}
+            <div className="md:hidden fixed bottom-6 right-6 z-50">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button size="icon" className="rounded-full shadow-2xl size-14 bg-pink-primary hover:bg-pink-primary/90 text-white border-2 border-white/20">
+                    <Menu className="size-6" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="rounded-t-[2rem] max-h-[85vh] overflow-y-auto px-6 pb-8 pt-4 border-t border-border/40 shadow-2xl bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+                  <SheetHeader className="mb-6 text-left">
+                    <SheetTitle className="text-xl font-display text-ink">Menu Navigasi</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col w-full h-auto bg-transparent gap-2 p-0 items-stretch">
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("dashboard")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "dashboard" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Dashboard
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("events")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "events" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Kelola Event
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("pendaftar")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "pendaftar" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Pendaftar
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("testimoni")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "testimoni" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Testimoni
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("history")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "history" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Dokumentasi History
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("webhook")}
+                        className={cn("w-full text-left py-3 px-4 text-base rounded-xl transition-all border", activeTab === "webhook" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        Payment History
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("checkin")}
+                        className={cn("w-full flex items-center text-left py-3 px-4 text-base rounded-xl transition-all border gap-2", activeTab === "checkin" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        <QrCode className="size-4" /> Check-in
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("keuangan")}
+                        className={cn("w-full flex items-center text-left py-3 px-4 text-base rounded-xl transition-all border gap-2", activeTab === "keuangan" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        <Wallet className="size-4" /> Keuangan
+                      </button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <button
+                        onClick={() => setActiveTab("reminders")}
+                        className={cn("w-full flex items-center text-left py-3 px-4 text-base rounded-xl transition-all border gap-2", activeTab === "reminders" ? "bg-primary/10 text-primary border-primary/20 font-semibold" : "border-transparent hover:bg-secondary/50")}
+                      >
+                        <Bell className="size-4" /> Pengingat
+                      </button>
+                    </SheetClose>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+          </div>
 
           {/* ------------------------------ Dashboard ------------------------------ */}
           <TabsContent value="dashboard" className="mt-4">
@@ -1845,7 +2241,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           chartLoading ||
                           statusDistributionLoading ||
                           eventPerformanceLoading) &&
-                          "animate-spin",
+                        "animate-spin",
                       )}
                     />
                     Refresh
@@ -1857,8 +2253,8 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
                 {dashboardLoading && !dashboardStats
                   ? [...Array(7)].map((_, i) => (
-                      <Skeleton key={i} className="h-28 w-full rounded-xl" />
-                    ))
+                    <Skeleton key={i} className="h-28 w-full rounded-xl" />
+                  ))
                   : dashboardStats
                     ? (
                       <>
@@ -1898,18 +2294,20 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           label="Rata-rata / Event"
                           value={dashboardStats.avgPendaftarPerEvent}
                           color="green"
+                          description="Rata-rata pendaftar dari semua event."
                         />
                         <StatCard
                           icon={Percent}
                           label="Tingkat Konversi"
                           value={`${dashboardStats.conversionRate}%`}
                           color="pink"
+                          description="Persentase pendaftar yang bayar lunas."
                         />
                       </>
                     )
                     : [...Array(7)].map((_, i) => (
-                        <Skeleton key={i} className="h-28 w-full rounded-xl" />
-                      ))}
+                      <Skeleton key={i} className="h-28 w-full rounded-xl" />
+                    ))}
               </div>
 
               {/* Pendaftar-over-time chart (30 days) */}
@@ -2390,6 +2788,16 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
             </div>
           </TabsContent>
 
+          {/* ------------------------------ Testimoni ------------------------------ */}
+          <TabsContent value="testimoni" className="mt-4">
+            <AdminTestimoni token={token!} />
+          </TabsContent>
+
+          {/* ------------------------------ Laporan Keuangan ------------------------------ */}
+          <TabsContent value="keuangan" className="mt-4">
+            <AdminKeuangan token={token} events={events} />
+          </TabsContent>
+
           {/* ------------------------------ Kelola Event ------------------------------ */}
           <TabsContent value="events" className="mt-4">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -2397,17 +2805,30 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
               <div className="lg:col-span-3">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Calendar className="size-4 text-pink-primary" />
-                      Daftar Event
-                    </CardTitle>
-                    <CardDescription>
-                      Klik &quot;Detail&quot; untuk lihat analytics, &quot;Edit&quot; untuk
-                      mengisi form di kanan.
-                    </CardDescription>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1.5">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Calendar className="size-4 text-pink-primary" />
+                          Daftar Event
+                        </CardTitle>
+                        <CardDescription>
+                          Klik "Detail" untuk lihat analytics, "Edit" untuk mengisi form di kanan.
+                        </CardDescription>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void fetchEvents()}
+                        disabled={eventsLoading}
+                        className="shrink-0"
+                      >
+                        <RefreshCw className={cn("size-4", eventsLoading && "animate-spin")} />
+                        Refresh
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    {eventsLoading ? (
+                    {eventsLoading && events.length === 0 ? (
                       <div className="space-y-2">
                         {[...Array(4)].map((_, i) => (
                           <Skeleton key={i} className="h-12 w-full" />
@@ -2418,57 +2839,68 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         Belum ada event. Tambahkan event pertama di form kanan.
                       </div>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Judul</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>
-                              <span className="inline-flex items-center gap-1">
-                                <Users className="size-3.5" /> Kuota
-                              </span>
-                            </TableHead>
-                            <TableHead>Tanggal</TableHead>
-                            <TableHead className="text-right">Aksi</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {events.map((ev) => (
-                            <TableRow key={ev.id}>
-                              <TableCell className="font-medium max-w-[220px] truncate">
-                                {ev.judul}
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={ev.status} />
-                              </TableCell>
-                              <TableCell className="font-data">{ev.kuotaMax}</TableCell>
-                              <TableCell className="font-data">{ev.tanggal}</TableCell>
-                              <TableCell className="text-right">
-                                <div className="inline-flex items-center gap-1.5">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setDetailEventId(ev.id)}
-                                    title="Detail analytics event ini"
-                                    aria-label={`Detail analytics ${ev.judul}`}
-                                  >
-                                    <BarChart3 className="size-3.5" />
-                                    <span className="hidden sm:inline">Detail</span>
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => startEdit(ev)}
-                                  >
-                                    <Pencil className="size-3.5" />
-                                    <span className="hidden sm:inline">Edit</span>
-                                  </Button>
-                                </div>
-                              </TableCell>
+                      <div className="overflow-x-auto w-full">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Judul</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>
+                                <span className="inline-flex items-center gap-1">
+                                  <Users className="size-3.5" /> Kuota
+                                </span>
+                              </TableHead>
+                              <TableHead>Tanggal</TableHead>
+                              <TableHead className="text-right">Aksi</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {events.map((ev) => (
+                              <TableRow key={ev.id}>
+                                <TableCell className="font-medium max-w-[220px] truncate">
+                                  {ev.judul}
+                                </TableCell>
+                                <TableCell>
+                                  <StatusBadge status={ev.status} />
+                                </TableCell>
+                                <TableCell className="font-data">{ev.kuotaMax}</TableCell>
+                                <TableCell className="font-data">{ev.tanggal}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="inline-flex items-center gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setDetailEventId(ev.id)}
+                                      title="Detail analytics event ini"
+                                      aria-label={`Detail analytics ${ev.judul}`}
+                                    >
+                                      <BarChart3 className="size-3.5" />
+                                      <span className="hidden sm:inline">Detail</span>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => startEdit(ev)}
+                                    >
+                                      <Pencil className="size-3.5" />
+                                      <span className="hidden sm:inline">Edit</span>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:bg-destructive/10"
+                                      onClick={() => setEventToDelete(ev)}
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                      <span className="hidden sm:inline">Hapus</span>
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -2524,8 +2956,8 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1.5">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="flex flex-col gap-1.5 col-span-2">
                           <Label htmlFor="f-tanggal">Tanggal *</Label>
                           <Input
                             id="f-tanggal"
@@ -2538,22 +2970,15 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           />
                         </div>
                         <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="f-status">Status *</Label>
-                          <Select
-                            value={form.status}
-                            onValueChange={(v) =>
-                              setForm({ ...form, status: v as AdminEventItem["status"] })
+                          <Label htmlFor="f-waktu">Waktu Mulai</Label>
+                          <Input
+                            id="f-waktu"
+                            type="time"
+                            value={form.waktuMulai}
+                            onChange={(e) =>
+                              setForm({ ...form, waktuMulai: e.target.value })
                             }
-                          >
-                            <SelectTrigger id="f-status" className="w-full">
-                              <SelectValue placeholder="Pilih status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="upcoming">Upcoming</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="closed">Closed</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          />
                         </div>
                       </div>
 
@@ -2569,6 +2994,25 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           placeholder="Lokasi event"
                           required
                         />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="f-status">Status *</Label>
+                        <Select
+                          value={form.status}
+                          onValueChange={(v) =>
+                            setForm({ ...form, status: v as AdminEventItem["status"] })
+                          }
+                        >
+                          <SelectTrigger id="f-status" className="w-full">
+                            <SelectValue placeholder="Pilih status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="upcoming">Upcoming</SelectItem>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -2656,6 +3100,23 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                 </Card>
               </div>
             </div>
+
+            <AlertDialog open={!!eventToDelete} onOpenChange={(open) => !open && setEventToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus Event?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Yakin ingin menghapus event &quot;{eventToDelete?.judul}&quot;? Semua data pendaftar, peserta, dan check-in terkait event ini akan ikut terhapus. Tindakan ini TIDAK bisa dibatalkan.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmDeleteEvent} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                    Hapus
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           {/* ------------------------------ Pendaftar ------------------------------ */}
@@ -2664,94 +3125,104 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
             <Card className="mb-4">
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                <div className="flex flex-col md:flex-row md:items-end gap-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="p-event">Filter Event</Label>
-                      <Select
-                        value={pendaftarFilters.idEvent || "all"}
-                        onValueChange={(v) =>
-                          setPendaftarFilters((prev) => ({
-                            ...prev,
-                            idEvent: v === "all" ? "" : v,
-                          }))
-                        }
-                      >
-                        <SelectTrigger id="p-event" className="w-full">
-                          <SelectValue placeholder="Semua Event" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Semua Event</SelectItem>
-                          {events.map((ev) => (
-                            <SelectItem key={ev.id} value={ev.id}>
-                              {ev.judul}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div className="flex flex-col md:flex-row md:items-end gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="p-event">Filter Event</Label>
+                        <Select
+                          value={pendaftarFilters.idEvent || "all"}
+                          onValueChange={(v) =>
+                            setPendaftarFilters((prev) => ({
+                              ...prev,
+                              idEvent: v === "all" ? "" : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger id="p-event" className="w-full">
+                            <SelectValue placeholder="Semua Event" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Event</SelectItem>
+                            {events.map((ev) => (
+                              <SelectItem key={ev.id} value={ev.id}>
+                                {ev.judul}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="p-status">Filter Status</Label>
+                        <Select
+                          value={pendaftarFilters.status || "all"}
+                          onValueChange={(v) =>
+                            setPendaftarFilters((prev) => ({
+                              ...prev,
+                              status: v === "all" ? "" : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger id="p-status" className="w-full">
+                            <SelectValue placeholder="Semua Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Status</SelectItem>
+                            <SelectItem value="pending_payment">Pending</SelectItem>
+                            <SelectItem value="verified">Verified</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="p-status">Filter Status</Label>
-                      <Select
-                        value={pendaftarFilters.status || "all"}
-                        onValueChange={(v) =>
-                          setPendaftarFilters((prev) => ({
-                            ...prev,
-                            status: v === "all" ? "" : v,
-                          }))
-                        }
+                    <div className="flex md:justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void fetchPendaftar()}
+                        disabled={pendaftarLoading}
+                        className="shrink-0"
                       >
-                        <SelectTrigger id="p-status" className="w-full">
-                          <SelectValue placeholder="Semua Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Semua Status</SelectItem>
-                          <SelectItem value="pending_payment">Pending</SelectItem>
-                          <SelectItem value="verified">Verified</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <RefreshCw className={cn("size-4", pendaftarLoading && "animate-spin")} />
+                        Refresh
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleExportCsv()}
+                        disabled={csvExporting}
+                        className="shrink-0"
+                      >
+                        {csvExporting ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Download className="size-4" />
+                        )}
+                        Export CSV
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex md:justify-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleExportCsv()}
-                      disabled={csvExporting}
-                      className="shrink-0"
-                    >
-                      {csvExporting ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Download className="size-4" />
-                      )}
-                      Export CSV
-                    </Button>
+                  {/* Free-text client-side search across nama / kode / kontak */}
+                  <div className="relative">
+                    <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="text"
+                      value={pendaftarSearch}
+                      onChange={(e) => setPendaftarSearch(e.target.value)}
+                      placeholder="Cari nama / kode / kontak…"
+                      className="pl-9"
+                      aria-label="Cari pendaftar"
+                    />
+                    {pendaftarSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPendaftarSearch("")}
+                        aria-label="Bersihkan pencarian"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-ink cursor-pointer"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    )}
                   </div>
-                </div>
-                {/* Free-text client-side search across nama / kode / kontak */}
-                <div className="relative">
-                  <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                  <Input
-                    type="text"
-                    value={pendaftarSearch}
-                    onChange={(e) => setPendaftarSearch(e.target.value)}
-                    placeholder="Cari nama / kode / kontak…"
-                    className="pl-9"
-                    aria-label="Cari pendaftar"
-                  />
-                  {pendaftarSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setPendaftarSearch("")}
-                      aria-label="Bersihkan pencarian"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-ink cursor-pointer"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  )}
-                </div>
                 </div>
               </CardContent>
             </Card>
@@ -2769,7 +3240,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {pendaftarLoading ? (
+                {pendaftarLoading && pendaftarList.length === 0 ? (
                   <div className="space-y-2">
                     {[...Array(5)].map((_, i) => (
                       <Skeleton key={i} className="h-10 w-full" />
@@ -2781,253 +3252,272 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                   </div>
                 ) : (
                   <>
-                  {/* Bulk action toolbar — sticky at the top of the table area.
+                    {/* Bulk action toolbar — sticky at the top of the table area.
                       Only rendered when at least one row is selected. */}
-                  {selectedKodes.size > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b p-3 rounded-t-lg flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
-                    >
-                      <div className="flex items-center gap-2 text-sm flex-1 min-w-0">
-                        <span className="inline-flex items-center justify-center size-7 rounded-full bg-pink-primary/10 text-pink-primary font-data font-semibold shrink-0">
-                          {selectedKodes.size}
-                        </span>
-                        <span className="truncate">
-                          pendaftar dipilih
-                          {selectedPendingCount < selectedKodes.size && (
-                            <span className="block text-xs text-muted-foreground">
-                              {selectedPendingCount} pending, {" "}
-                              {selectedKodes.size - selectedPendingCount} sudah bukan pending
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={bulkActionLoading !== null || selectedPendingCount === 0}
-                          onClick={() => void handleBulkVerify()}
-                          className="text-success border-success/40 hover:bg-success/10"
-                        >
-                          {bulkActionLoading === "verify" ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Check className="size-3.5" />
-                          )}
-                          Verifikasi Semua
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={bulkActionLoading !== null || selectedPendingCount === 0}
-                          onClick={handleBulkRejectOpen}
-                          className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                        >
-                          {bulkActionLoading === "reject" ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <X className="size-3.5" />
-                          )}
-                          Tolak Semua
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={bulkActionLoading !== null}
-                          onClick={clearSelection}
-                        >
-                          Batal
-                        </Button>
-                      </div>
-                    </motion.div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <Table className="text-sm">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[44px] pr-0">
-                            <Checkbox
-                              aria-label={
-                                allVisibleSelected
-                                  ? "Batal pilih semua"
-                                  : "Pilih semua pendaftar terlihat"
-                              }
-                              checked={
-                                allVisibleSelected
-                                  ? true
-                                  : someVisibleSelected
-                                    ? "indeterminate"
-                                    : false
-                              }
-                              onCheckedChange={toggleAllVisible}
-                              disabled={filteredPendaftar.length === 0}
-                            />
-                          </TableHead>
-                          <TableHead>Kode</TableHead>
-                          <TableHead>Nama</TableHead>
-                          <TableHead>Kontak</TableHead>
-                          <TableHead>Event</TableHead>
-                          <TableHead className="text-right">Jumlah</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
-                          <TableHead>Bukti</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Aksi</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredPendaftar.length === 0 ? (
+                    {selectedKodes.size > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b p-3 rounded-t-lg flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+                      >
+                        <div className="flex items-center gap-2 text-sm flex-1 min-w-0">
+                          <span className="inline-flex items-center justify-center size-7 rounded-full bg-pink-primary/10 text-pink-primary font-data font-semibold shrink-0">
+                            {selectedKodes.size}
+                          </span>
+                          <span className="truncate">
+                            pendaftar dipilih
+                            {selectedPendingCount < selectedKodes.size && (
+                              <span className="block text-xs text-muted-foreground">
+                                {selectedPendingCount} pending, {" "}
+                                {selectedKodes.size - selectedPendingCount} sudah bukan pending
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={bulkActionLoading !== null || selectedPendingCount === 0}
+                            onClick={() => void handleBulkVerify()}
+                            className="text-success border-success/40 hover:bg-success/10"
+                          >
+                            {bulkActionLoading === "verify" ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Check className="size-3.5" />
+                            )}
+                            Verifikasi Semua
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={bulkActionLoading !== null || selectedPendingCount === 0}
+                            onClick={handleBulkRejectOpen}
+                            className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                          >
+                            {bulkActionLoading === "reject" ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <X className="size-3.5" />
+                            )}
+                            Tolak Semua
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={bulkActionLoading !== null}
+                            onClick={() => setNotifyKodes(Array.from(selectedKodes))}
+                            className="text-pink-primary border-pink-primary/40 hover:bg-pink-primary/10"
+                          >
+                            <MessageCircle className="size-3.5" />
+                            Buat Pesan ({selectedKodes.size})
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={bulkActionLoading !== null}
+                            onClick={clearSelection}
+                          >
+                            Batal
+                          </Button>
+                        </div>
+                      </motion.div>
+                    )}
+                    <div className="overflow-x-auto">
+                      <Table className="text-sm">
+                        <TableHeader>
                           <TableRow>
-                            <TableCell
-                              colSpan={10}
-                              className="text-center text-muted-foreground py-8"
-                            >
-                              Tidak ada pendaftar yang cocok dengan pencarian.
-                            </TableCell>
+                            <TableHead className="w-[44px] pr-0">
+                              <Checkbox
+                                aria-label={
+                                  allVisibleSelected
+                                    ? "Batal pilih semua"
+                                    : "Pilih semua pendaftar terlihat"
+                                }
+                                checked={
+                                  allVisibleSelected
+                                    ? true
+                                    : someVisibleSelected
+                                      ? "indeterminate"
+                                      : false
+                                }
+                                onCheckedChange={toggleAllVisible}
+                                disabled={paginatedPendaftar.length === 0}
+                              />
+                            </TableHead>
+                            <TableHead>Kode</TableHead>
+                            <TableHead>Nama</TableHead>
+                            <TableHead>Kontak</TableHead>
+                            <TableHead>Event</TableHead>
+                            <TableHead className="text-right">Jumlah</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Aksi</TableHead>
                           </TableRow>
-                        ) : null}
-                        {filteredPendaftar.map((p) => {
-                          const isLoading =
-                            pendaftarActionLoading === p.kodeReferensi;
-                          const isSelected = selectedKodes.has(p.kodeReferensi);
-                          return (
-                            <TableRow
-                              key={p.kodeReferensi}
-                              className={cn(
-                                "transition-colors",
-                                isSelected && "bg-secondary/30",
-                              )}
-                            >
-                              <TableCell className="pr-0">
-                                <Checkbox
-                                  aria-label={`Pilih ${p.kodeReferensi}`}
-                                  checked={isSelected}
-                                  onCheckedChange={() => toggleKode(p.kodeReferensi)}
-                                  disabled={bulkActionLoading !== null}
-                                />
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void fetchPendaftarDetail(p.kodeReferensi)
-                                  }
-                                  title="Lihat detail pendaftar"
-                                  className="text-pink-primary font-mono cursor-pointer hover:underline text-left"
-                                >
-                                  {p.kodeReferensi}
-                                </button>
-                              </TableCell>
-                              <TableCell className="font-medium max-w-[160px] truncate">
-                                {p.nama}
-                              </TableCell>
-                              <TableCell className="font-data text-muted-foreground">
-                                {p.kontak}
-                              </TableCell>
-                              <TableCell className="max-w-[160px] truncate text-muted-foreground">
-                                {p.event.judul}
-                              </TableCell>
-                              <TableCell className="font-data text-right">
-                                {p.jumlahOrang}
-                              </TableCell>
-                              <TableCell className="font-data text-right">
-                                {formatIDR(p.totalBayar)}
-                              </TableCell>
-                              <TableCell>
-                                {p.buktiTransfer ? (
-                                  <a
-                                    href={p.buktiTransfer}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-pink-primary hover:underline"
-                                  >
-                                    <ExternalLink className="size-3" />
-                                    Lihat
-                                  </a>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <PendaftarStatusBadge status={p.status} />
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {p.status === "pending_payment" ? (
-                                  <div className="flex justify-end gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isLoading || bulkActionLoading !== null}
-                                      onClick={() =>
-                                        void handleVerify(p.kodeReferensi)
-                                      }
-                                      className="text-success border-success/40 hover:bg-success/10"
-                                    >
-                                      {isLoading ? (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                      ) : (
-                                        <Check className="size-3.5" />
-                                      )}
-                                      Verifikasi
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isLoading || bulkActionLoading !== null}
-                                      onClick={() => {
-                                        setRejectCatatan("");
-                                        setRejectDialog({
-                                          kodeReferensi: p.kodeReferensi,
-                                          nama: p.nama,
-                                        });
-                                      }}
-                                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                                    >
-                                      <X className="size-3.5" />
-                                      Tolak
-                                    </Button>
-                                  </div>
-                                ) : p.status === "verified" ? (
-                                  <div className="flex justify-end gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      title="Buat pesan notifikasi WhatsApp"
-                                      aria-label={`Buat pesan notifikasi untuk ${p.kodeReferensi}`}
-                                      onClick={() =>
-                                        setNotifyKode(p.kodeReferensi)
-                                      }
-                                      className="border-pink-primary/40 text-pink-primary hover:bg-pink-primary/10"
-                                    >
-                                      <MessageCircle className="size-3.5" />
-                                      Buat Pesan
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">
-                                    —
-                                  </span>
-                                )}
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedPendaftar.length === 0 ? (
+                            <TableRow>
+                              <TableCell
+                                colSpan={10}
+                                className="text-center text-muted-foreground py-8"
+                              >
+                                Tidak ada pendaftar yang cocok dengan pencarian di halaman ini.
                               </TableCell>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      Menampilkan {filteredPendaftar.length} dari{" "}
-                      {pendaftarList.length} pendaftar
-                    </span>
-                    {selectedKodes.size > 0 && (
-                      <span className="text-pink-primary">
-                        {selectedKodes.size} dipilih
+                          ) : null}
+                          {paginatedPendaftar.map((p) => {
+                            const isLoading =
+                              pendaftarActionLoading === p.kodeReferensi;
+                            const isSelected = selectedKodes.has(p.kodeReferensi);
+                            return (
+                              <TableRow
+                                key={p.kodeReferensi}
+                                className={cn(
+                                  "transition-colors",
+                                  isSelected && "bg-secondary/30",
+                                )}
+                              >
+                                <TableCell className="pr-0">
+                                  <Checkbox
+                                    aria-label={`Pilih ${p.kodeReferensi}`}
+                                    checked={isSelected}
+                                    onCheckedChange={() => toggleKode(p.kodeReferensi)}
+                                    disabled={bulkActionLoading !== null}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-mono">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void fetchPendaftarDetail(p.kodeReferensi)
+                                    }
+                                    title="Lihat detail pendaftar"
+                                    className="text-pink-primary font-mono cursor-pointer hover:underline text-left"
+                                  >
+                                    {p.kodeReferensi}
+                                  </button>
+                                </TableCell>
+                                <TableCell className="font-medium max-w-[160px] truncate">
+                                  {p.nama}
+                                </TableCell>
+                                <TableCell className="font-data text-muted-foreground">
+                                  {p.kontak}
+                                </TableCell>
+                                <TableCell className="max-w-[160px] truncate text-muted-foreground">
+                                  {p.event.judul}
+                                </TableCell>
+                                <TableCell className="font-data text-right">
+                                  {p.jumlahOrang}
+                                </TableCell>
+                                <TableCell className="font-data text-right">
+                                  {formatIDR(p.totalBayar)}
+                                </TableCell>
+                                <TableCell>
+                                  <PendaftarStatusBadge status={p.status} />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {p.status === "pending_payment" ? (
+                                    <div className="flex justify-end gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isLoading || bulkActionLoading !== null}
+                                        onClick={() =>
+                                          setVerifyDialog({ kodeReferensi: p.kodeReferensi })
+                                        }
+                                        className="text-success border-success/40 hover:bg-success/10"
+                                      >
+                                        {isLoading ? (
+                                          <Loader2 className="size-3.5 animate-spin" />
+                                        ) : (
+                                          <Check className="size-3.5" />
+                                        )}
+                                        Verifikasi
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isLoading || bulkActionLoading !== null}
+                                        onClick={() => {
+                                          setRejectCatatan("");
+                                          setRejectDialog({
+                                            kodeReferensi: p.kodeReferensi,
+                                            nama: p.nama,
+                                          });
+                                        }}
+                                        className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                                      >
+                                        <X className="size-3.5" />
+                                        Tolak
+                                      </Button>
+                                    </div>
+                                  ) : p.status === "verified" ? (
+                                    <div className="flex justify-end gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        title="Buat pesan notifikasi WhatsApp"
+                                        aria-label={`Buat pesan notifikasi untuk ${p.kodeReferensi}`}
+                                        onClick={() =>
+                                          setNotifyKodes([p.kodeReferensi])
+                                        }
+                                        className="border-pink-primary/40 text-pink-primary hover:bg-pink-primary/10"
+                                      >
+                                        <MessageCircle className="size-3.5" />
+                                        Buat Pesan
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">
+                                      —
+                                    </span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        Menampilkan {paginatedPendaftar.length} dari{" "}
+                        {filteredPendaftar.length} hasil (Total {pendaftarList.length} pendaftar)
                       </span>
+                      {selectedKodes.size > 0 && (
+                        <span className="text-pink-primary">
+                          {selectedKodes.size} dipilih
+                        </span>
+                      )}
+                    </div>
+                    {totalPendaftarPages > 1 && (
+                      <div className="flex items-center justify-end gap-2 mt-4">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setPendaftarPage((p) => Math.max(1, p - 1))}
+                          disabled={pendaftarPage === 1}
+                        >
+                          <ChevronLeft className="size-4" />
+                        </Button>
+                        <span className="text-sm text-muted-foreground px-2">
+                          Halaman {pendaftarPage} dari {totalPendaftarPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setPendaftarPage((p) => Math.min(totalPendaftarPages, p + 1))}
+                          disabled={pendaftarPage === totalPendaftarPages}
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
                     )}
-                  </div>
                   </>
                 )}
               </CardContent>
@@ -3191,6 +3681,70 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            {/* Verifikasi Individual Confirm Dialog */}
+            <AlertDialog
+              open={verifyDialog !== null}
+              onOpenChange={(isOpen) => {
+                if (!isOpen) {
+                  setVerifyDialog(null);
+                }
+              }}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Verifikasi Pembayaran</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Yakin ingin memverifikasi pembayaran untuk pendaftar{" "}
+                    <span className="font-mono text-pink-primary font-bold">
+                      {verifyDialog?.kodeReferensi}
+                    </span>
+                    ? Statusnya akan berubah menjadi Verified.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-success text-white hover:bg-success/90"
+                    onClick={async () => {
+                      if (verifyDialog) {
+                        const kode = verifyDialog.kodeReferensi;
+                        await handleVerify(kode);
+                        if (pendaftarDetail?.kodeReferensi === kode) {
+                          await fetchPendaftarDetail(kode);
+                        }
+                      }
+                    }}
+                  >
+                    Ya, Verifikasi
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Logout Confirm Dialog */}
+            <AlertDialog open={logoutDialog} onOpenChange={setLogoutDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Keluar dari Panel Admin?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Sesi Anda akan diakhiri dan token akses akan dihapus. Anda harus memasukkan password kembali untuk mengakses panel ini.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-white hover:bg-destructive/90"
+                    onClick={() => {
+                      setLogoutDialog(false);
+                      handleLogout();
+                    }}
+                  >
+                    Ya, Keluar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           {/* ------------------------------ Dokumentasi History ------------------------------ */}
@@ -3257,16 +3811,16 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                 </CardContent>
               </Card>
 
-              {/* Unggah Dokumentasi — recap text + photo upload (existing) */}
+              {/* Kelola Dokumentasi — recap text + photo upload/delete */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <ImageIcon className="size-4 text-pink-primary" />
-                    Unggah Dokumentasi
+                    Kelola Dokumentasi
                   </CardTitle>
                   <CardDescription>
                     Pilih event berstatus <span className="font-medium">closed</span>,
-                    lalu unggah recap dan foto dokumentasi.
+                    lalu unggah recap dan foto dokumentasi. Anda juga dapat menghapus foto lama atau mereset dokumentasi.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -3316,7 +3870,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                       </div>
 
                       <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="h-fotos">Foto Dokumentasi (1–10)</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="h-fotos">Foto Baru (Maks total 10 dengan foto lama)</Label>
+                        </div>
                         <Input
                           id="h-fotos"
                           type="file"
@@ -3325,8 +3881,39 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           onChange={handleHistoryFileChange}
                         />
                         <p className="text-xs text-muted-foreground">
-                          JPG/PNG/PDF, maks 2MB per file, maks 10 file.
+                          JPG/PNG/PDF, maks 2MB per file.
                         </p>
+
+                        {/* Existing Photos Grid */}
+                        {existingDokFotos.length > 0 && (
+                          <div className="mt-4">
+                            <Label className="text-sm font-semibold mb-2 block">Foto Lama Terunggah ({existingDokFotos.length})</Label>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                              {existingDokFotos.map((url, i) => (
+                                <div
+                                  key={url}
+                                  className="relative aspect-square rounded-md border overflow-hidden bg-muted group"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`Foto Lama ${i + 1}`}
+                                    className="size-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePhoto(url)}
+                                    className="absolute top-1 right-1 size-7 rounded-full bg-red-600/80 text-white flex items-center justify-center hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    aria-label={`Hapus foto lama ${i + 1}`}
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* New Photos Preview Grid */}
 
                         {historyPhotos.length > 0 && (
                           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-2">
@@ -3368,20 +3955,34 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
 
                       <Separator />
 
-                      <Button
-                        type="submit"
-                        disabled={historySubmitting}
-                        className="bg-pink-primary hover:bg-pink-primary/90 w-full"
-                      >
-                        {historySubmitting ? (
-                          "Mengunggah..."
-                        ) : (
-                          <>
-                            <Upload className="size-4" />
-                            Unggah Dokumentasi
-                          </>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        {existingDokFotos.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleDeleteHistory}
+                            disabled={historySubmitting}
+                            className="w-full sm:w-auto shrink-0"
+                          >
+                            <Trash2 className="size-4" />
+                            Hapus Semua Dokumentasi
+                          </Button>
                         )}
-                      </Button>
+                        <Button
+                          type="submit"
+                          disabled={historySubmitting}
+                          className="bg-pink-primary hover:bg-pink-primary/90 w-full"
+                        >
+                          {historySubmitting ? (
+                            "Menyimpan..."
+                          ) : (
+                            <>
+                              <Upload className="size-4" />
+                              Simpan / Unggah Tambahan
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </form>
                   )}
                 </CardContent>
@@ -3393,9 +3994,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
           <TabsContent value="webhook" className="mt-4">
             <div className="flex items-center justify-between mb-4 gap-2">
               <div>
-                <h2 className="font-display text-xl text-ink">Webhook Logs</h2>
+                <h2 className="font-display text-xl text-ink">Payment History</h2>
                 <p className="text-sm text-muted-foreground">
-                  Riwayat pengiriman webhook dari layanan cek mutasi.
+                  Riwayat webhook dan log verifikasi pembayaran otomatis.
                 </p>
               </div>
               <Button
@@ -3416,9 +4017,8 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
               <CardContent className="pt-6 flex items-start gap-3">
                 <Info className="size-5 text-amber shrink-0 mt-0.5" />
                 <p className="text-sm text-muted-foreground">
-                  Log ini mencatat semua webhook yang diterima dari layanan cek
-                  mutasi pihak ketiga. Berguna untuk debug kalau verifikasi
-                  pembayaran gagal.
+                  Log ini mencatat semua webhook yang diterima.
+                  Berguna untuk debug kalau verifikasi pembayaran gagal atau tertunda.
                 </p>
               </CardContent>
             </Card>
@@ -3491,12 +4091,13 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                     Tidak ada log yang cocok dengan filter.
                   </div>
                 ) : (
-                  <div className="max-h-[500px] overflow-y-auto">
+                  <div className="max-h-[500px] overflow-auto">
                     <Table className="text-sm">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Waktu</TableHead>
                           <TableHead>IP</TableHead>
+                          <TableHead>Trx ID</TableHead>
                           <TableHead className="text-right">Nominal</TableHead>
                           <TableHead>Tanda Tangan</TableHead>
                           <TableHead>IP Allowlist</TableHead>
@@ -3516,6 +4117,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                             </TableCell>
                             <TableCell className="font-data text-muted-foreground">
                               {log.ip || "—"}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {extractTrxId(log.rawPayload)}
                             </TableCell>
                             <TableCell className="font-data text-right">
                               {log.amount != null
@@ -3596,7 +4200,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                       className={cn(
                         "size-4",
                         (checkInRecentLoading || checkInStatsLoading) &&
-                          "animate-spin",
+                        "animate-spin",
                       )}
                     />
                     Refresh
@@ -3763,7 +4367,19 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                                 {c.nama}
                               </TableCell>
                               <TableCell className="font-mono text-pink-primary text-xs">
-                                {c.kodeReferensi}
+                                <div className="flex items-center gap-1.5">
+                                  {c.kodeReferensi}
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(c.kodeReferensi);
+                                      toast.success("Kode disalin");
+                                    }}
+                                    className="text-muted-foreground hover:text-ink transition-colors focus:outline-none"
+                                    title="Salin kode"
+                                  >
+                                    <Copy className="size-3" />
+                                  </button>
+                                </div>
                               </TableCell>
                               <TableCell className="hidden md:table-cell max-w-[200px] truncate text-muted-foreground">
                                 {c.judul}
@@ -3783,6 +4399,8 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                 </CardContent>
               </Card>
             </div>
+
+            <CheckInReport events={events} token={token} />
           </TabsContent>
 
           {/* ------------------------------ Pengingat (Task 10-C) ------------------------------ */}
@@ -3909,7 +4527,18 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
             }
           }}
         >
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-4xl sm:max-w-4xl w-[95vw] max-h-[85vh] overflow-y-auto"
+            onPointerDownOutside={(e) => {
+              if (lightboxDataRef.current) e.preventDefault();
+            }}
+            onInteractOutside={(e) => {
+              if (lightboxDataRef.current) e.preventDefault();
+            }}
+            onEscapeKeyDown={(e) => {
+              if (lightboxDataRef.current) e.preventDefault();
+            }}
+          >
             {pendaftarDetailLoading !== null && pendaftarDetail === null ? (
               <div className="flex items-center justify-center gap-2 py-16">
                 <Loader2 className="size-6 animate-spin text-pink-primary" />
@@ -3964,8 +4593,18 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           <span className="text-muted-foreground">
                             Kode Referensi
                           </span>
-                          <span className="font-mono text-pink-primary">
+                          <span className="font-mono text-pink-primary flex items-center gap-2">
                             {pendaftarDetail.kodeReferensi}
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(pendaftarDetail.kodeReferensi);
+                                toast.success("Kode disalin");
+                              }}
+                              className="text-muted-foreground hover:text-ink transition-colors focus:outline-none"
+                              title="Salin kode"
+                            >
+                              <Copy className="size-3.5" />
+                            </button>
                           </span>
                         </div>
                       </CardContent>
@@ -3986,14 +4625,6 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                           </span>
                           <span className="font-data">
                             {formatIDR(pendaftarDetail.hargaDasar)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            Kode Unik
-                          </span>
-                          <span className="font-mono text-amber">
-                            {pendaftarDetail.kodeUnik}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 items-center">
@@ -4090,6 +4721,103 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                     </Card>
                   </div>
 
+                  {/* Detail Peserta */}
+                  {pendaftarDetail.peserta && pendaftarDetail.peserta.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Users className="size-4 text-pink-primary" />
+                          Daftar Peserta ({pendaftarDetail.peserta.length} Orang)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {pendaftarDetail.peserta.map((p) => (
+                            <div key={p.urutan} className="border border-border rounded-lg p-3 bg-card flex flex-col gap-1.5 text-sm">
+                              <div className="flex items-center justify-between border-b pb-1.5 mb-1.5">
+                                <span className="font-semibold text-ink text-xs uppercase tracking-wider text-muted-foreground">Peserta {p.urutan}</span>
+                              </div>
+                              <div className="flex justify-between gap-2">
+                                <span className="text-muted-foreground text-xs">Nama Lengkap</span>
+                                <span className="font-medium text-right text-xs truncate" title={p.namaLengkap}>{p.namaLengkap}</span>
+                              </div>
+                              <div className="flex justify-between gap-2">
+                                <span className="text-muted-foreground text-xs">Panggilan</span>
+                                <span className="text-right text-xs">{p.namaPanggilan}</span>
+                              </div>
+                              {p.umur && (
+                                <div className="flex justify-between gap-2">
+                                  <span className="text-muted-foreground text-xs">Umur</span>
+                                  <span className="text-right text-xs">{p.umur} thn</span>
+                                </div>
+                              )}
+                              {p.alamat && (
+                                <div className="flex justify-between gap-2">
+                                  <span className="text-muted-foreground text-xs">Alamat</span>
+                                  <span className="text-right text-xs max-w-[120px] truncate" title={p.alamat}>{p.alamat}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between gap-2">
+                                <span className="text-muted-foreground text-xs">WhatsApp</span>
+                                <span className="font-mono text-right text-xs">{p.nomorWa}</span>
+                              </div>
+                              {p.instagram && (
+                                <div className="flex justify-between gap-2">
+                                  <span className="text-muted-foreground text-xs">Instagram</span>
+                                  <a
+                                    href={`https://instagram.com/${encodeURIComponent(p.instagram.replace(/^@/, '').trim())}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-right text-xs text-pink-primary font-medium hover:underline cursor-pointer pointer-events-auto z-10"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    @{p.instagram}
+                                  </a>
+                                </div>
+                              )}
+                              {p.fotoDiri ? (
+                                <div className="mt-2 flex items-center justify-between border-t pt-2 border-border">
+                                  <span className="text-muted-foreground text-xs">Selfie</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const path = p.fotoDiri as string;
+                                      const allSelfies = pendaftarDetail.peserta
+                                        .filter(x => x.fotoDiri)
+                                        .map(x => ({
+                                          url: (x.fotoDiri as string).startsWith("http") ? (x.fotoDiri as string) : `${window.location.origin}${(x.fotoDiri as string).startsWith("/") ? "" : "/"}${x.fotoDiri}`,
+                                          fileName: `${x.namaLengkap} - Selfie.jpg`
+                                        }));
+                                      const clickedUrl = path.startsWith("http") ? path : `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
+                                      const clickedIndex = allSelfies.findIndex(s => s.url === clickedUrl);
+                                      setLightboxData({
+                                        urls: allSelfies.map(s => s.url),
+                                        fileNames: allSelfies.map(s => s.fileName),
+                                        activeIndex: clickedIndex >= 0 ? clickedIndex : 0
+                                      });
+                                    }}
+                                    className="block cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-primary rounded overflow-hidden mt-3"
+                                  >
+                                    <img
+                                      src={p.fotoDiri.startsWith("http") ? p.fotoDiri : `${window.location.origin}${p.fotoDiri.startsWith("/") ? "" : "/"}${p.fotoDiri}`}
+                                      alt={`Selfie ${p.namaLengkap}`}
+                                      className="size-10 rounded-md object-cover border border-border"
+                                    />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="mt-2 flex items-center justify-between border-t pt-2 border-border">
+                                  <span className="text-muted-foreground text-xs">Selfie</span>
+                                  <span className="text-xs text-muted-foreground italic">Belum diunggah</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Bukti Transfer */}
                   {pendaftarDetail.buktiTransfer && (
                     <div>
@@ -4106,27 +4834,25 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         if (isImage) {
                           return (
                             <div className="space-y-2">
-                              <a
-                                href={fullUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block"
+                              <button
+                                type="button"
+                                onClick={() => setLightboxData({ urls: [fullUrl], fileNames: [`${pendaftarDetail.nama} - Bukti Pembayaran.jpg`], activeIndex: 0 })}
+                                className="block mx-auto cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-primary rounded-lg overflow-hidden"
                               >
                                 <img
                                   src={fullUrl}
                                   alt="Bukti transfer"
-                                  className="max-h-48 rounded-lg object-contain border border-border mx-auto"
+                                  className="max-h-48 rounded-lg object-contain border border-border"
                                 />
-                              </a>
-                              <a
-                                href={fullUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setLightboxData({ urls: [fullUrl], fileNames: [`${pendaftarDetail.nama} - Bukti Pembayaran.jpg`], activeIndex: 0 })}
                                 className="inline-flex items-center gap-1 text-xs text-pink-primary hover:underline"
                               >
                                 <ExternalLink className="size-3" />
-                                Buka di tab baru
-                              </a>
+                                Perbesar Gambar
+                              </button>
                             </div>
                           );
                         }
@@ -4169,14 +4895,11 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                             pendaftarDetail.kodeReferensi
                           }
                           onClick={async () => {
-                            await handleVerify(pendaftarDetail.kodeReferensi);
-                            await fetchPendaftarDetail(
-                              pendaftarDetail.kodeReferensi,
-                            );
+                            setVerifyDialog({ kodeReferensi: pendaftarDetail.kodeReferensi });
                           }}
                         >
                           {pendaftarActionLoading ===
-                          pendaftarDetail.kodeReferensi ? (
+                            pendaftarDetail.kodeReferensi ? (
                             <Loader2 className="size-4 animate-spin" />
                           ) : (
                             <Check className="size-4" />
@@ -4208,7 +4931,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         variant="outline"
                         className="mr-auto border-pink-primary/40 text-pink-primary hover:bg-pink-primary/10"
                         onClick={() =>
-                          setNotifyKode(pendaftarDetail.kodeReferensi)
+                          setNotifyKodes([pendaftarDetail.kodeReferensi])
                         }
                       >
                         <Sparkles className="size-4" />
@@ -4244,12 +4967,12 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
         {/* Opened by the "Buat Pesan Notifikasi" button in the pendaftar
             detail modal (verified pendaftar only) or the MessageCircle icon
             button in the pendaftar table row (verified pendaftar only).
-            Calls /api/admin/pendaftar/notify which uses z-ai-web-dev-sdk to
-            compose a friendly Indonesian WhatsApp-style message. */}
+            Calls /api/admin/pendaftar/notify to generate a friendly
+            Indonesian WhatsApp-style message. */}
         <NotificationDialog
-          kode={notifyKode}
+          kodes={notifyKodes}
           token={token ?? ""}
-          onClose={() => setNotifyKode(null)}
+          onClose={() => setNotifyKodes(null)}
         />
 
         {/* ------------------------------ Event detail analytics modal (Task 9-C) ------------------------------ */}
@@ -4285,16 +5008,19 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
           token={token ?? ""}
         />
 
-        {/* ------------------------------ Quick actions FAB (Task 10-C) ------------------------------ */}
-        {/* A floating action button at the bottom-right of the admin panel
-            that expands into 3 quick actions: Check-in, Pengingat,
-            Dashboard. Desktop-only by virtue of being mounted in Layer 2
-            (admin sees it once they've typed their token). */}
-        <QuickActions
-          onCheckIn={() => setCheckInDialogOpen(true)}
-          onGoReminders={() => setActiveTab("reminders")}
-          onGoDashboard={() => setActiveTab("dashboard")}
-        />
+        <AnimatePresence>
+          {lightboxData && (
+            <PhotoLightbox
+              photos={lightboxData.urls}
+              activeIndex={lightboxData.activeIndex}
+              onIndexChange={(i) => setLightboxData(prev => prev ? { ...prev, activeIndex: i } : null)}
+              onClose={() => setLightboxData(null)}
+              altPrefix="Bukti Foto"
+              fileNames={lightboxData.fileNames}
+            />
+          )}
+        </AnimatePresence>
+
       </main>
     </div>
   );

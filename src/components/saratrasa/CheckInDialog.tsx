@@ -42,6 +42,7 @@ import {
   Clock,
   MapPin,
   History,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -54,6 +55,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { QRScanner } from "./QRScanner";
 
 type PendaftarStatus = "pending_payment" | "verified" | "rejected";
@@ -134,15 +145,17 @@ export function CheckInDialog({
   const [stats, setStats] = React.useState<CheckInStats | null>(null);
   const [statsLoading, setStatsLoading] = React.useState(false);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: string; nama: string } | null>(null);
 
   /* Fetch recent check-ins. */
-  const fetchRecent = React.useCallback(async () => {
+  const fetchRecent = React.useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
     setRecentLoading(true);
     try {
       const res = await fetch("/api/admin/check-in/recent", {
         method: "GET",
         headers: { "X-Admin-Token": token },
+        signal,
       });
       if (res.status === 401) {
         toast.error("Token admin tidak valid.");
@@ -151,12 +164,12 @@ export function CheckInDialog({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.error((data as { error?: string }).error || "Gagal memuat check-in terkini.");
-        return;
+        throw new Error((data as { error?: string }).error || "Gagal memuat data check-in");
       }
       const data = (await res.json()) as { checkIns: RecentCheckIn[] };
       setRecent(data.checkIns);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       toast.error("Gagal memuat check-in: " + (err as Error).message);
     } finally {
       setRecentLoading(false);
@@ -164,13 +177,14 @@ export function CheckInDialog({
   }, [token, onOpenChange]);
 
   /* Fetch stats. */
-  const fetchStats = React.useCallback(async () => {
+  const fetchStats = React.useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
     setStatsLoading(true);
     try {
       const res = await fetch("/api/admin/check-in/stats", {
         method: "GET",
         headers: { "X-Admin-Token": token },
+        signal,
       });
       if (res.status === 401) {
         toast.error("Token admin tidak valid.");
@@ -179,24 +193,60 @@ export function CheckInDialog({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.error((data as { error?: string }).error || "Gagal memuat statistik check-in.");
-        return;
+        throw new Error((data as { error?: string }).error || "Gagal memuat statistik");
       }
       const data = (await res.json()) as CheckInStats;
       setStats(data);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       toast.error("Gagal memuat statistik: " + (err as Error).message);
     } finally {
       setStatsLoading(false);
     }
   }, [token, onOpenChange]);
 
+  // Stats are smaller footprint so we just auto-fetch them on a 10s interval.
+  React.useEffect(() => {
+    if (!open || !token) return;
+    
+    const controller = new AbortController();
+    
+    const interval = setInterval(() => {
+      void fetchStats(controller.signal);
+    }, 10_000);
+    
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, [open, token, fetchStats]);
+
+  const handleDeleteCheckIn = React.useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/check-in?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Token": token },
+      });
+      if (!res.ok) {
+        throw new Error("Gagal menghapus data");
+      }
+      toast.success("Check-in berhasil dihapus");
+      setRefreshNonce((n) => n + 1);
+    } catch (err) {
+      toast.error("Gagal menghapus check-in");
+    } finally {
+      setDeleteConfirm(null);
+    }
+  }, [token]);
+
   /* Initial load when the dialog opens. */
   React.useEffect(() => {
+    const controller = new AbortController();
     if (open && token) {
-      void fetchRecent();
-      void fetchStats();
+      void fetchRecent(controller.signal);
+      void fetchStats(controller.signal);
     }
+    return () => controller.abort();
   }, [open, token, fetchRecent, fetchStats, refreshNonce]);
 
   /* Refresh after each successful scan. */
@@ -205,8 +255,16 @@ export function CheckInDialog({
   }, []);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl w-[95vw] max-h-[95vh] overflow-hidden p-0 gap-0">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent 
+        className="max-w-6xl sm:max-w-6xl w-[95vw] max-h-[95vh] overflow-hidden p-0 gap-0"
+        onInteractOutside={(e) => {
+          // Selalu cegah dialog scanner ini tertutup hanya karena klik/fokus di luar.
+          // Dialog hanya boleh ditutup dengan tombol X atau Escape.
+          e.preventDefault();
+        }}
+      >
         {/* Header */}
         <DialogHeader className="px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-pink-soft/40 to-amber/5">
           <div className="flex items-center justify-between gap-3 pr-8">
@@ -236,14 +294,14 @@ export function CheckInDialog({
         </DialogHeader>
 
         {/* Body — 2-column on lg, stacked on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-0 overflow-y-auto max-h-[calc(95vh-72px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-0 overflow-y-auto max-h-[calc(95vh-72px)] lg:min-h-[600px]">
           {/* LEFT — Scanner */}
-          <div className="lg:col-span-3 p-4 sm:p-6 border-b lg:border-b-0 lg:border-r bg-card/30">
+          <div className="lg:col-span-3 p-4 sm:p-6 lg:p-8 border-b lg:border-b-0 lg:border-r bg-card/30">
             <QRScanner token={token} onCheckIn={handleCheckIn} />
           </div>
 
           {/* RIGHT — Stats + Recent */}
-          <div className="lg:col-span-2 p-4 sm:p-6 space-y-4 bg-background">
+          <div className="lg:col-span-2 p-4 sm:p-6 lg:p-8 space-y-5 bg-background">
             {/* Stats summary */}
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -363,7 +421,7 @@ export function CheckInDialog({
                   </p>
                 </div>
               ) : (
-                <ScrollArea className="max-h-[40vh] lg:max-h-[calc(95vh-440px)] min-h-[200px] -mx-1 px-1">
+                <ScrollArea className="max-h-[40vh] lg:max-h-[calc(95vh-380px)] min-h-[200px] -mx-1 px-1">
                   <ul className="space-y-1.5">
                     {recent.map((c) => (
                       <li
@@ -383,16 +441,27 @@ export function CheckInDialog({
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1 shrink-0">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] h-4 px-1.5",
-                                statusBadgeClass(c.status),
-                              )}
-                            >
-                              {statusLabel(c.status)}
-                            </Badge>
-                            <span className="text-[10px] text-muted-foreground font-mono inline-flex items-center gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] h-4 px-1.5",
+                                  statusBadgeClass(c.status),
+                                )}
+                              >
+                                {statusLabel(c.status)}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 hover:bg-rejected/10 text-muted-foreground hover:text-rejected"
+                                onClick={() => setDeleteConfirm({ id: c.id, nama: c.nama })}
+                                title="Hapus check-in"
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground font-mono inline-flex items-center gap-0.5 mt-0.5">
                               <Clock className="size-2.5" />
                               {formatTime(c.checkedInAt)}
                             </span>
@@ -418,6 +487,34 @@ export function CheckInDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+      <AlertDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setDeleteConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Data Check-in</AlertDialogTitle>
+            <AlertDialogDescription>
+              Yakin ingin menghapus data check-in untuk relawan{" "}
+              <span className="font-bold text-ink">{deleteConfirm?.nama}</span>?
+              Aksi ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => deleteConfirm && handleDeleteCheckIn(deleteConfirm.id)}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

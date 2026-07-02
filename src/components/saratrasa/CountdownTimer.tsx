@@ -130,7 +130,7 @@ export function CountdownTimer({ targetDate, label = "Menuju event:", eventTitle
         "border-border/50"
       )}
     >
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col items-center justify-center gap-1.5 text-center">
         <p className="text-sm font-bold uppercase tracking-widest text-primary sm:text-base">
           {label}
         </p>
@@ -143,7 +143,7 @@ export function CountdownTimer({ targetDate, label = "Menuju event:", eventTitle
 
       {isPast ? (
         isLive ? (
-          <div className="mt-4">
+          <div className="mt-4 flex justify-center">
             <Badge
               className={cn(
                 "rounded-full px-5 py-2 text-sm font-semibold text-white",
@@ -169,7 +169,7 @@ export function CountdownTimer({ targetDate, label = "Menuju event:", eventTitle
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="mt-4 flex flex-wrap items-center justify-start gap-2 sm:gap-3"
+          className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:gap-3"
         >
           <TimeBox value={timeLeft.days} unit="Hari" />
           <Colon />

@@ -26,6 +26,8 @@ interface PhotoLightboxProps {
   onIndexChange: (index: number) => void;
   /** Optional alt text prefix for photos */
   altPrefix?: string;
+  /** Optional file names for downloading */
+  fileNames?: string[];
 }
 
 const MIN_ZOOM = 1;
@@ -62,6 +64,7 @@ export function PhotoLightbox({
   onClose,
   onIndexChange,
   altPrefix = "Foto",
+  fileNames,
 }: PhotoLightboxProps) {
   const reduceMotion = useReducedMotion();
   const [direction, setDirection] = React.useState<number>(0);
@@ -152,7 +155,7 @@ export function PhotoLightbox({
     if (downloading) return;
     const url = photos[current];
     if (!url) return;
-    const filename = `saratrasaa-foto-${current + 1}.jpg`;
+    const filename = fileNames?.[current] || `saratrasaa-foto-${current + 1}.jpg`;
     setDownloading(true);
     try {
       const res = await fetch(url, { mode: "cors" });
@@ -218,6 +221,7 @@ export function PhotoLightbox({
           break;
         case "Escape":
           e.preventDefault();
+          e.stopPropagation();
           onClose();
           break;
       }
@@ -381,12 +385,12 @@ export function PhotoLightbox({
         animate: {
           opacity: 1,
           x: 0,
-          transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+          transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const },
         },
         exit: (dir: number) => ({
           opacity: 0,
           x: dir > 0 ? -80 : 80,
-          transition: { duration: 0.2, ease: "easeIn" },
+          transition: { duration: 0.2, ease: "easeIn" as const },
         }),
       };
 
@@ -401,10 +405,18 @@ export function PhotoLightbox({
         animate="animate"
         exit="exit"
         transition={{ duration: reduceMotion ? 0 : 0.25 }}
-        className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center"
+        className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center pointer-events-auto"
         role="dialog"
         aria-modal="true"
         aria-label="Galeri foto — layar penuh"
+        onPointerDown={(e) => {
+          // Stop native bubbling so Radix Dialog's interact-outside doesn't catch this
+          // and close the underlying dialog when clicking inside the lightbox.
+          e.nativeEvent.stopPropagation();
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !isZoomed) onClose();
+        }}
       >
         {/* Top-left: counter + caption */}
         <div

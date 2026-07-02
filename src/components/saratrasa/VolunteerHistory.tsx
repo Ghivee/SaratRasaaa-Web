@@ -233,8 +233,8 @@ interface VolunteerHistoryProps {
   onOpenChange: (open: boolean) => void;
   /** Optional prefilled kontak (passed from CekStatus form state). */
   initialKontak?: string;
-  /** Optional prefilled nama depan (passed from CekStatus form state). */
-  initialNama?: string;
+  /** Optional prefilled OTP (passed from CekStatus form state). */
+  initialOtp?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -247,7 +247,7 @@ export function VolunteerHistory({
   open,
   onOpenChange,
   initialKontak,
-  initialNama,
+  initialOtp,
 }: VolunteerHistoryProps) {
   const reduceMotion = useReducedMotion();
 
@@ -274,7 +274,7 @@ export function VolunteerHistory({
   React.useEffect(() => {
     if (open) {
       setKontak(initialKontak ?? "");
-      setNama(initialNama ?? "");
+      setNama("");
       // Don't wipe data on open if it's already there — but DO reset view
       // to "form" so the user sees the form first each time they reopen.
       setView("form");
@@ -296,15 +296,15 @@ export function VolunteerHistory({
       }, 250);
       return () => window.clearTimeout(t);
     }
-  }, [open, initialKontak, initialNama]);
+  }, [open, initialKontak, initialOtp]);
 
   // --- Submit handler: fetch /api/volunteer-history -----------------------
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const ko = kontak.trim();
-    const na = nama.trim();
-    if (!ko || !na) {
-      toast.error("Nomor HP dan nama depan wajib diisi.");
+    const nm = nama.trim();
+    if (!ko || nm.length < 2) {
+      toast.error("Nomor HP dan Nama Lengkap (min. 2 karakter) wajib diisi.");
       return;
     }
 
@@ -313,7 +313,7 @@ export function VolunteerHistory({
     setData(null);
 
     try {
-      const params = new URLSearchParams({ kontak: ko, nama: na });
+      const params = new URLSearchParams({ kontak: ko, nama: nm });
       const res = await fetch(`/api/volunteer-history?${params.toString()}`);
 
       if (res.status === 200) {
@@ -408,7 +408,7 @@ export function VolunteerHistory({
             </DialogTitle>
           </div>
           <DialogDescription className="text-xs text-muted-foreground sm:text-sm">
-            Lihat semua pendaftaran event Saratrasaa kamu dengan nomor HP + nama depan.
+            Lihat semua pendaftaran event Saratrasaa kamu dengan nomor HP + nama lengkap.
           </DialogDescription>
         </DialogHeader>
 
@@ -417,13 +417,13 @@ export function VolunteerHistory({
             we skip the motion wrappers entirely (the view swaps instantly). */}
         <div className="max-h-[calc(90vh-7rem)] overflow-y-auto scroll-soft px-5 py-5 sm:px-6">
           {reduceMotion ? (
-            <ViewContent
-              view={view}
-              kontak={kontak}
-              nama={nama}
-              setKontak={setKontak}
-              setNama={setNama}
-              loading={loading}
+              <ViewContent
+                view={view}
+                kontak={kontak}
+                nama={nama}
+                setKontak={setKontak}
+                setNama={setNama}
+                loading={loading}
               error={error}
               data={data}
               onSubmit={handleSubmit}
@@ -575,7 +575,7 @@ function FormView({
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="space-y-1.5">
           <Label htmlFor="vh-kontak" className="text-sm font-medium">
-            Nomor HP
+            Nomor WhatsApp
           </Label>
           <Input
             id="vh-kontak"
@@ -585,43 +585,41 @@ function FormView({
             inputMode="tel"
             autoComplete="tel"
             maxLength={20}
-            className="h-11 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
             disabled={loading}
+            className="h-11 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
           />
         </div>
+        
         <div className="space-y-1.5">
           <Label htmlFor="vh-nama" className="text-sm font-medium">
-            Nama Depan
+            Nama Lengkap (Sesuai Data Pendaftaran)
           </Label>
           <Input
             id="vh-nama"
             value={nama}
             onChange={(e) => setNama(e.target.value)}
-            placeholder="Nama depan kamu"
-            autoComplete="given-name"
-            maxLength={60}
+            placeholder="Ketik nama lengkap kamu"
             className="h-11 rounded-xl border-secondary bg-card shadow-sm transition-all focus-visible:ring-primary/30 focus-visible:shadow-md"
             disabled={loading}
           />
         </div>
         <p className="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-          Demi keamanan data, pencarian wajib menggunakan nomor HP + nama depan.
-          Pencarian hanya dengan nomor HP tidak diizinkan.
+          Gunakan nomor WhatsApp dan nama lengkap yang kamu gunakan saat mendaftar.
         </p>
         <Button
           type="submit"
           size="lg"
-          disabled={loading}
+          disabled={loading || !kontak || nama.length < 2}
           className="btn-press w-full rounded-full bg-primary shadow-md hover:bg-primary/90 hover:shadow-lg transition-all"
         >
           {loading ? (
             <>
-              <Loader2 className="size-4 animate-spin" />
+              <Loader2 className="size-4 mr-2 animate-spin" />
               Mengambil riwayat...
             </>
           ) : (
             <>
-              <Search className="size-4" />
+              <Search className="size-4 mr-2" />
               Lihat Riwayat Saya
             </>
           )}

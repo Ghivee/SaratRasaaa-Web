@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Navbar } from "@/components/saratrasa/Navbar";
@@ -22,7 +22,7 @@ import { TimelineSection } from "@/components/saratrasa/TimelineSection";
 import { GalleryView } from "@/components/saratrasa/GalleryView";
 import { ScrollToTop } from "@/components/saratrasa/ScrollToTop";
 import { SectionDivider } from "@/components/saratrasa/SectionDivider";
-import type { ActiveEventSummary, HistoryEvent, View } from "@/components/saratrasa/types";
+import type { ActiveEventSummary, HistoryEvent, View, GalleryItem } from "@/components/saratrasa/types";
 
 /**
  * HomeClient — the actual Saratrasaa app.
@@ -32,7 +32,7 @@ import type { ActiveEventSummary, HistoryEvent, View } from "@/components/saratr
  * - If `admin` secret verifies server-side → render AdminPanel (layer 1 of admin auth).
  * - Otherwise → render the public app with 3 in-page views.
  */
-export default function HomeClient() {
+export default function HomeClient({ initialActiveEvent = null, initialTestimonis = [] }: { initialActiveEvent?: ActiveEventSummary | null, initialTestimonis?: any[] }) {
   const searchParams = useSearchParams();
   const adminSecret = searchParams.get("admin") || undefined;
   const initialKode = searchParams.get("kode") || undefined;
@@ -76,33 +76,71 @@ export default function HomeClient() {
         <main className="flex-1">
           <AdminPanel urlSecret={adminSecret} />
         </main>
-        <Footer />
-        <ScrollToTop />
       </div>
     );
   }
 
-  return <PublicApp initialKode={initialKode} />;
+  return <PublicApp initialKode={initialKode} initialActiveEvent={initialActiveEvent} initialTestimonis={initialTestimonis} />;
 }
 
 /* -------------------------------------------------------------------------- */
 /* Public app — Beranda / Daftar / Cek Status                                  */
 /* -------------------------------------------------------------------------- */
 
-function PublicApp({ initialKode }: { initialKode?: string }) {
-  // If a kode is present in the URL (deep link from shared ticket), start on cek-status.
-  const [view, setView] = useState<View>(initialKode ? "cek-status" : "beranda");
-  const [activeEvent, setActiveEvent] = useState<ActiveEventSummary | null>(null);
-  const [activeLoading, setActiveLoading] = useState(true);
+function PublicApp({ initialKode, initialActiveEvent, initialTestimonis }: { initialKode?: string; initialActiveEvent: ActiveEventSummary | null; initialTestimonis: any[] }) {
+  const [view, setView] = useState<View>(() => {
+    if (initialKode) return "cek-status";
+    return "beranda";
+  });
+
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    if (!initialKode) {
+      const path = window.location.pathname.replace("/", "");
+      if (path === "daftar" || path === "cek-status" || path === "galeri") {
+        setView(path as View);
+      }
+    }
+  }, [initialKode]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const expectedPath = view === "beranda" ? "/" : `/${view}`;
+      if (url.pathname !== expectedPath) {
+        window.history.pushState(null, "", expectedPath);
+      }
+    }
+  }, [view]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.replace("/", "");
+      if (path === "beranda" || path === "daftar" || path === "cek-status" || path === "galeri") {
+        setView(path as View);
+      } else {
+        setView("beranda");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const [activeEvent, setActiveEvent] = useState<ActiveEventSummary | null>(initialActiveEvent);
+  const [activeLoading, setActiveLoading] = useState(false);
   const [historyEvents, setHistoryEvents] = useState<HistoryEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(true);
   // Respect prefers-reduced-motion — when set, skip the page transition
   // entirely (no AnimatePresence, no motion.div) so the view swap is
   // instant and doesn't trigger any motion-induced discomfort.
   const reduceMotion = useReducedMotion();
 
-  const fetchActive = useCallback(async () => {
-    setActiveLoading(true);
+  const fetchActive = useCallback(async (background = false) => {
+    if (!background) setActiveLoading(true);
     try {
       const res = await fetch("/api/event/active", { cache: "no-store" });
       const data = await res.json();
@@ -110,7 +148,7 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
     } catch {
       setActiveEvent(null);
     } finally {
-      setActiveLoading(false);
+      if (!background) setActiveLoading(false);
     }
   }, []);
 
@@ -127,10 +165,26 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
     }
   }, []);
 
+  const fetchGallery = useCallback(async (background = false) => {
+    if (!background) setGalleryLoading(true);
+    try {
+      const res = await fetch("/api/gallery", { cache: "no-store" });
+      const data = await res.json();
+      setGalleryItems(data.events ?? []);
+    } catch {
+      setGalleryItems([]);
+    } finally {
+      if (!background) setGalleryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchActive();
+    // Only fetch active if it's the first time or we don't have initial data.
+    // By passing `true` for background when we have initialData, we avoid the loading glitch.
+    fetchActive(!!initialActiveEvent);
     fetchHistory();
-  }, [fetchActive, fetchHistory]);
+    fetchGallery();
+  }, [fetchActive, fetchHistory, fetchGallery, initialActiveEvent]);
 
   // Listen for the saratrasa:goto custom event (emitted by DaftarWizard's
   // "Cek Status Pembayaran" button so the user lands on cek-status view).
@@ -157,16 +211,18 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
   }, []);
 
   // When user goes to daftar, refetch active event in case quota changed.
+  // We do it in the background so it doesn't trigger the skeleton loading again.
   useEffect(() => {
-    if (view === "daftar") fetchActive();
-  }, [view, fetchActive]);
+    if (view === "daftar") fetchActive(true);
+    if (view === "galeri") fetchGallery(true);
+  }, [view, fetchActive, fetchGallery]);
 
   const memoNavbar = useMemo(
     () => (
       <Navbar
         view={view}
         onViewChange={handleViewChange}
-        activeEvent={activeLoading ? null : activeEvent}
+        activeEvent={activeEvent}
       />
     ),
     [view, handleViewChange, activeEvent, activeLoading],
@@ -193,17 +249,11 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
               </div>
             </section>
           )}
-          <SectionDivider variant="dots" />
-          {/* Community impact stats — social proof */}
-          <StatsDashboard />
-          <SectionDivider variant="wave" />
-          {/* Leaderboard + community impact — top volunteers & aggregated impact */}
-          <LeaderboardSection />
-          <SectionDivider variant="wave" />
+
           {/* How it works — 3-step guide */}
           <HowItWorks />
           <SectionDivider variant="dots" />
-          <TestimonialSection />
+          <TestimonialSection testimonis={initialTestimonis} />
           <SectionDivider variant="dots" />
           <ProfilSection />
           <SectionDivider variant="wave" />
@@ -224,6 +274,7 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
         <section className="container mx-auto px-4 py-8 md:py-12">
           <DaftarWizard
             activeEvent={activeLoading ? null : activeEvent}
+            loading={activeLoading}
             onBack={() => handleViewChange("beranda")}
           />
         </section>
@@ -236,7 +287,7 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
       )}
 
       {view === "galeri" && (
-        <GalleryView />
+        <GalleryView items={galleryItems} loading={galleryLoading} />
       )}
     </>
   );
@@ -245,7 +296,7 @@ function PublicApp({ initialKode }: { initialKode?: string }) {
     <div className="min-h-screen flex flex-col bg-background">
       {memoNavbar}
 
-      <main className="flex-1">
+      <main className="flex-1 w-full flex flex-col overflow-x-hidden">
         {reduceMotion ? (
           // Reduced-motion branch: render the view content directly, no
           // AnimatePresence, no motion.div. The view still swaps instantly

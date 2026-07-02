@@ -23,6 +23,7 @@ export async function GET() {
         judul: true,
         tanggal: true,
         lokasi: true,
+        linkGmaps: true,
         recap: true,
         fotoDok: true,
         fotoCover: true,
