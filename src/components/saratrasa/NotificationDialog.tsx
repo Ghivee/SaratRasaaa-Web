@@ -174,11 +174,25 @@ export function NotificationDialog({
   const [sendStatus, setSendStatus] = React.useState<Record<string, "sending" | "success" | "error">>({});
 
   React.useEffect(() => {
-    // Reset template if defaultTemplate changes while closed
     if (open) {
-      setTemplate(defaultTemplate);
+      const saved = localStorage.getItem("saratrasaa_notify_template");
+      if (saved) {
+        setTemplate(saved);
+      } else {
+        setTemplate(defaultTemplate);
+      }
     }
   }, [open, defaultTemplate]);
+
+  function handleTemplateChange(val: string) {
+    setTemplate(val);
+    localStorage.setItem("saratrasaa_notify_template", val);
+  }
+
+  function resetTemplate() {
+    setTemplate(defaultTemplate);
+    localStorage.removeItem("saratrasaa_notify_template");
+  }
 
   React.useEffect(() => {
     if (!open || !kodes || kodes.length === 0 || !token) {
@@ -334,21 +348,22 @@ export function NotificationDialog({
           <div className="space-y-4">
             {/* Template Editor */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-2">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                  <span>Template Pesan</span>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Template Pesan</span>
+                    <div className="text-[10px] bg-muted px-2 py-1 rounded text-muted-foreground overflow-x-auto max-w-full">
+                      Tersedia: <code className="text-pink-primary">{'{nama}'}</code> (Panggilan), <code className="text-pink-primary">{'{namaLengkap}'}</code> (Lengkap), <code className="text-pink-primary">{'{eventJudul}'}</code>, <code className="text-pink-primary">{'{eventTanggal}'}</code>, <code className="text-pink-primary">{'{eventLokasi}'}</code>, <code className="text-pink-primary">{'{jumlahOrang}'}</code>, <code className="text-pink-primary">{'{totalBayar}'}</code>, <code className="text-pink-primary">{'{kodeReferensi}'}</code>, <code className="text-pink-primary">{'{shareUrl}'}</code>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={resetTemplate} className="h-7 text-[10px] uppercase tracking-wider">Reset</Button>
                 </div>
+                <Textarea
+                  value={template}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="min-h-[160px] font-mono text-sm leading-relaxed"
+                  placeholder="Ketik template pesan di sini..."
+                />
               </div>
-              <Textarea
-                value={template}
-                onChange={(e) => setTemplate(e.target.value)}
-                className="min-h-[160px] font-mono text-sm leading-relaxed"
-                placeholder="Ketik template pesan di sini..."
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Variabel: <code className="text-pink-primary">{'{nama}'}</code> (Panggilan), <code className="text-pink-primary">{'{namaLengkap}'}</code> (Lengkap), <code className="text-pink-primary">{'{eventJudul}'}</code>, <code className="text-pink-primary">{'{eventTanggal}'}</code>, <code className="text-pink-primary">{'{eventLokasi}'}</code>, <code className="text-pink-primary">{'{jumlahOrang}'}</code>, <code className="text-pink-primary">{'{totalBayar}'}</code>, <code className="text-pink-primary">{'{kodeReferensi}'}</code>, <code className="text-pink-primary">{'{shareUrl}'}</code>
-              </p>
-            </div>
 
             {/* Recipient List */}
             <div className="space-y-3 mt-6">

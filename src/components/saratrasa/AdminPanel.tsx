@@ -153,6 +153,7 @@ import { formatIDR } from "@/lib/saratrasa";
 import { ImageDropZone } from "./ImageDropZone";
 import { RecapModal } from "./RecapModal";
 import { NotificationDialog } from "./NotificationDialog";
+import { BroadcastGlobalDialog, type BroadcastUser } from "./BroadcastGlobalDialog";
 import { AdminEventDetailModal } from "./AdminEventDetailModal";
 import { CheckInReport } from "./CheckInReport";
 import { CheckInDialog } from "./CheckInDialog";
@@ -781,6 +782,9 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     null,
   );
 
+  // ----- Broadcast Massal State -----
+  const [broadcastUsers, setBroadcastUsers] = React.useState<BroadcastUser[] | null>(null);
+
   // ----- Pendaftar detail modal (Pendaftar tab) -----
   // pendaftarDetail holds the full detail payload; null = modal closed.
   // pendaftarDetailLoading holds the kode being fetched (for the initial
@@ -1034,6 +1038,7 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
     setPendaftarDetailLoading(null);
     setRecapEventId(null);
     setNotifyKodes(null);
+    setBroadcastUsers(null);
     setDetailEventId(null);
     setStatusDistribution([]);
     setStatusDistributionLoading(false);
@@ -1439,6 +1444,24 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
       void fetchCheckInStats();
     }
   }, [token, activeTab, fetchCheckInRecent, fetchCheckInStats]);
+
+  function handleOpenBroadcast() {
+    // Collect unique users by WA number
+    const map = new Map<string, BroadcastUser>();
+    for (const p of filteredPendaftar) {
+      if (!p.kontak) continue;
+      // Extract WA number
+      const normKontak = p.kontak.trim();
+      if (!map.has(normKontak)) {
+        map.set(normKontak, {
+          nama: p.peserta?.[0]?.namaPanggilan || p.nama.split(" ")[0] || p.nama,
+          namaLengkap: p.nama,
+          kontak: normKontak,
+        });
+      }
+    }
+    setBroadcastUsers(Array.from(map.values()));
+  }
 
   /* ------------------------------------------------------------------ */
   /* Export CSV — GET /api/admin/pendaftar/export (blob download)       */
@@ -3258,6 +3281,15 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         )}
                         Export CSV
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenBroadcast}
+                        className="shrink-0"
+                      >
+                        <MessageCircle className="size-4 mr-2" />
+                        Broadcast Massal
+                      </Button>
                     </div>
                   </div>
                   {/* Free-text client-side search across nama / kode / kontak */}
@@ -5060,6 +5092,13 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
           kodes={notifyKodes}
           token={token ?? ""}
           onClose={() => setNotifyKodes(null)}
+        />
+
+        {/* Broadcast Global Dialog */}
+        <BroadcastGlobalDialog
+          users={broadcastUsers}
+          token={token ?? ""}
+          onClose={() => setBroadcastUsers(null)}
         />
 
         {/* ------------------------------ Event detail analytics modal (Task 9-C) ------------------------------ */}
