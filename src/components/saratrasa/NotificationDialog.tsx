@@ -117,9 +117,12 @@ Sampai jumpa di lokasi! 🌿💚
 — Tim Saratrasaa`;
 
 function hydrateTemplate(template: string, d: NotifyData): string {
+  const fullName = d.pendaftar.nama;
+  const shortName = fullName.split(" ")[0] || fullName;
+
   return template
-    .replace(/{nama}/g, d.pendaftar.nama)
-    .replace(/{namaLengkap}/g, d.pendaftar.nama)
+    .replace(/{nama}/g, shortName)
+    .replace(/{namaLengkap}/g, fullName)
     .replace(/{eventJudul}/g, d.event.judul)
     .replace(/{eventTanggal}/g, formatTanggal(d.event.tanggal))
     .replace(/{eventLokasi}/g, d.event.lokasi)
@@ -342,7 +345,7 @@ export function NotificationDialog({
                 placeholder="Ketik template pesan di sini..."
               />
               <p className="text-[11px] text-muted-foreground">
-                Variabel: <code className="text-pink-primary">{'{nama}'}</code>, <code className="text-pink-primary">{'{namaLengkap}'}</code>, <code className="text-pink-primary">{'{eventJudul}'}</code>, <code className="text-pink-primary">{'{eventTanggal}'}</code>, <code className="text-pink-primary">{'{eventLokasi}'}</code>, <code className="text-pink-primary">{'{jumlahOrang}'}</code>, <code className="text-pink-primary">{'{totalBayar}'}</code>, <code className="text-pink-primary">{'{kodeReferensi}'}</code>, <code className="text-pink-primary">{'{shareUrl}'}</code>
+                Variabel: <code className="text-pink-primary">{'{nama}'}</code> (Panggilan), <code className="text-pink-primary">{'{namaLengkap}'}</code> (Lengkap), <code className="text-pink-primary">{'{eventJudul}'}</code>, <code className="text-pink-primary">{'{eventTanggal}'}</code>, <code className="text-pink-primary">{'{eventLokasi}'}</code>, <code className="text-pink-primary">{'{jumlahOrang}'}</code>, <code className="text-pink-primary">{'{totalBayar}'}</code>, <code className="text-pink-primary">{'{kodeReferensi}'}</code>, <code className="text-pink-primary">{'{shareUrl}'}</code>
               </p>
             </div>
 
