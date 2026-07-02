@@ -48,7 +48,7 @@ async function saveDataUrl(
   const match = /^data:[^;]+;base64,(.+)$/.exec(dataUrl);
   if (!match) return { error: "Format file tidak valid." };
 
-  const filename = `${filenamePrefix}-${Date.now()}-${Math.random()
+  const filename = `${filenamePrefix}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}.${result.ext}`;
 
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
   // ----- optional cover photo upload (validate + persist BEFORE touching DB) -----
   let fotoCoverPath: string | undefined;
   if (fotoCover) {
-    const saved = await saveDataUrl(fotoCover, "cover");
+    const saved = await saveDataUrl(fotoCover, "cover-event");
     if ("error" in saved) {
       return NextResponse.json({ error: saved.error }, { status: 400 });
     }

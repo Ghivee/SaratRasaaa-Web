@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
     const bytes = Buffer.from(match[2], "base64");
 
-    const filename = `selfie-${kodeNorm}-${urutan}-${Date.now()}.${v.ext}`;
+    const filename = `foto-diri/${kodeNorm}-${urutan}-${Date.now()}.${v.ext}`;
 
     if (!supabase) {
       return NextResponse.json(

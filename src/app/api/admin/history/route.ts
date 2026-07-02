@@ -46,7 +46,7 @@ async function saveDataUrl(
   const match = /^data:[^;]+;base64,(.+)$/.exec(dataUrl);
   if (!match) return { error: "Format file tidak valid." };
 
-  const filename = `${filenamePrefix}-${Date.now()}-${Math.random()
+  const filename = `${filenamePrefix}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}.${result.ext}`;
 
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
   // ----- persist each photo (report which one fails) -----
   const savedPaths: string[] = [];
   for (let i = 0; i < fotos.length; i++) {
-    const prefix = `dok-${idEvent}-${i}`;
+    const prefix = `history-dok/dok-${idEvent}-${i}`;
     const saved = await saveDataUrl(fotos[i], prefix);
     if ("error" in saved) {
       return NextResponse.json(

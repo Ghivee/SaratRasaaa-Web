@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     }
     const bytes = Buffer.from(match[2], "base64");
 
-    const filename = `bukti-${kodeNorm}-${Date.now()}.${v.ext}`;
+    const filename = `bukti-transfer/${kodeNorm}-${Date.now()}.${v.ext}`;
 
     if (!supabase) {
       return NextResponse.json(

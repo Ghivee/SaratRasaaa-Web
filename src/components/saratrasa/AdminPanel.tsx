@@ -4777,37 +4777,49 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                               )}
                               {p.fotoDiri ? (
                                 <div className="mt-2 flex items-center justify-between border-t pt-2 border-border">
-                                  <span className="text-muted-foreground text-xs">Selfie</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const path = p.fotoDiri as string;
-                                      const allSelfies = pendaftarDetail.peserta
-                                        .filter(x => x.fotoDiri)
-                                        .map(x => ({
-                                          url: (x.fotoDiri as string).startsWith("http") ? (x.fotoDiri as string) : `${window.location.origin}${(x.fotoDiri as string).startsWith("/") ? "" : "/"}${x.fotoDiri}`,
-                                          fileName: `${x.namaLengkap} - Selfie.jpg`
-                                        }));
-                                      const clickedUrl = path.startsWith("http") ? path : `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
-                                      const clickedIndex = allSelfies.findIndex(s => s.url === clickedUrl);
-                                      setLightboxData({
-                                        urls: allSelfies.map(s => s.url),
-                                        fileNames: allSelfies.map(s => s.fileName),
-                                        activeIndex: clickedIndex >= 0 ? clickedIndex : 0
-                                      });
-                                    }}
-                                    className="block cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-primary rounded overflow-hidden mt-3"
-                                  >
-                                    <img
-                                      src={p.fotoDiri.startsWith("http") ? p.fotoDiri : `${window.location.origin}${p.fotoDiri.startsWith("/") ? "" : "/"}${p.fotoDiri}`}
-                                      alt={`Selfie ${p.namaLengkap}`}
-                                      className="size-10 rounded-md object-cover border border-border"
-                                    />
-                                  </button>
+                                  <span className="text-muted-foreground text-xs">Foto Diri</span>
+                                  {typeof p.fotoDiri === "string" && p.fotoDiri.includes("drive.google.com") ? (
+                                    <a
+                                      href={p.fotoDiri}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-pink-primary font-medium hover:underline inline-flex items-center gap-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <ArrowUpRight className="size-3" /> Buka GDrive
+                                    </a>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const path = p.fotoDiri as string;
+                                        const allFotos = pendaftarDetail.peserta
+                                          .filter(x => x.fotoDiri && !(x.fotoDiri as string).includes("drive.google.com"))
+                                          .map(x => ({
+                                            url: (x.fotoDiri as string).startsWith("http") ? (x.fotoDiri as string) : `${window.location.origin}${(x.fotoDiri as string).startsWith("/") ? "" : "/"}${x.fotoDiri}`,
+                                            fileName: `${x.namaLengkap} - Foto Diri.jpg`
+                                          }));
+                                        const clickedUrl = path.startsWith("http") ? path : `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
+                                        const clickedIndex = allFotos.findIndex(s => s.url === clickedUrl);
+                                        setLightboxData({
+                                          urls: allFotos.map(s => s.url),
+                                          fileNames: allFotos.map(s => s.fileName),
+                                          activeIndex: clickedIndex >= 0 ? clickedIndex : 0
+                                        });
+                                      }}
+                                      className="block cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-primary rounded overflow-hidden mt-3"
+                                    >
+                                      <img
+                                        src={p.fotoDiri.startsWith("http") ? p.fotoDiri : `${window.location.origin}${p.fotoDiri.startsWith("/") ? "" : "/"}${p.fotoDiri}`}
+                                        alt={`Foto Diri ${p.namaLengkap}`}
+                                        className="size-10 rounded-md object-cover border border-border"
+                                      />
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="mt-2 flex items-center justify-between border-t pt-2 border-border">
-                                  <span className="text-muted-foreground text-xs">Selfie</span>
+                                  <span className="text-muted-foreground text-xs">Foto Diri</span>
                                   <span className="text-xs text-muted-foreground italic">Belum diunggah</span>
                                 </div>
                               )}
@@ -4829,8 +4841,24 @@ function AdminPanel({ urlSecret: _urlSecret }: AdminPanelProps) {
                         const fullUrl = path.startsWith("http")
                           ? path
                           : `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
-                        const isImage = /\.(jpg|jpeg|png)$/i.test(path);
-                        const isPdf = /\.pdf$/i.test(path);
+                        const isGdrive = /drive\.google\.com/i.test(path);
+                        const isImage = !isGdrive && /\.(jpg|jpeg|png)$/i.test(path);
+                        const isPdf = !isGdrive && /\.pdf$/i.test(path);
+
+                        if (isGdrive) {
+                          return (
+                            <a
+                              href={fullUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-sm text-pink-primary hover:underline"
+                            >
+                              <ArrowUpRight className="size-4" />
+                              Buka GDrive
+                            </a>
+                          );
+                        }
+
                         if (isImage) {
                           return (
                             <div className="space-y-2">
