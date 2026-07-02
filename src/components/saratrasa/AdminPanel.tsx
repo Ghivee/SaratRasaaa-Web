@@ -68,6 +68,7 @@ import {
   Copy,
   ChevronLeft,
   ChevronRight,
+  ArrowUpRight,
 } from "lucide-react";
 
 import {
