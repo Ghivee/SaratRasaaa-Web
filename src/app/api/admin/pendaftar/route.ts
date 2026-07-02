@@ -32,6 +32,9 @@ export async function GET(req: NextRequest) {
         event: {
           select: { judul: true, tanggal: true, lokasi: true },
         },
+        peserta: {
+          select: { namaPanggilan: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     });

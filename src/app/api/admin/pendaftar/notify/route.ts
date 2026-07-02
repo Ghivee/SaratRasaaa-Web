@@ -98,8 +98,12 @@ export async function POST(req: NextRequest) {
             judul: true,
             tanggal: true,
             lokasi: true,
-            harga: true,
           },
+        },
+        peserta: {
+          select: { namaPanggilan: true },
+          orderBy: { urutan: "asc" },
+          take: 1,
         },
       },
     });

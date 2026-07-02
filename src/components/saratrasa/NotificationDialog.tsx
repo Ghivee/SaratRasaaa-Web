@@ -41,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 interface NotifyPendaftar {
   kodeReferensi: string;
   nama: string;
+  peserta?: { namaPanggilan: string }[];
   kontak: string;
   jumlahOrang: number;
   totalBayar: number;
@@ -118,7 +119,7 @@ Sampai jumpa di lokasi! 🌿💚
 
 function hydrateTemplate(template: string, d: NotifyData): string {
   const fullName = d.pendaftar.nama;
-  const shortName = fullName.split(" ")[0] || fullName;
+  const shortName = d.pendaftar.peserta?.[0]?.namaPanggilan || fullName.split(" ")[0] || fullName;
 
   return template
     .replace(/{nama}/g, shortName)
