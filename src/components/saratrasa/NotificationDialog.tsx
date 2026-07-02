@@ -119,6 +119,7 @@ Sampai jumpa di lokasi! 🌿💚
 function hydrateTemplate(template: string, d: NotifyData): string {
   return template
     .replace(/{nama}/g, d.pendaftar.nama)
+    .replace(/{namaLengkap}/g, d.pendaftar.nama)
     .replace(/{eventJudul}/g, d.event.judul)
     .replace(/{eventTanggal}/g, formatTanggal(d.event.tanggal))
     .replace(/{eventLokasi}/g, d.event.lokasi)
@@ -333,9 +334,6 @@ export function NotificationDialog({
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                   <span>Template Pesan</span>
                 </div>
-                <div className="text-[10px] bg-muted px-2 py-1 rounded text-muted-foreground overflow-x-auto max-w-[50%] md:max-w-full">
-                  Tersedia: {'{nama}'}, {'{eventJudul}'}, {'{eventTanggal}'}, {'{eventLokasi}'}, {'{jumlahOrang}'}, {'{totalBayar}'}, {'{kodeReferensi}'}, {'{shareUrl}'}
-                </div>
               </div>
               <Textarea
                 value={template}
@@ -343,6 +341,9 @@ export function NotificationDialog({
                 className="min-h-[160px] font-mono text-sm leading-relaxed"
                 placeholder="Ketik template pesan di sini..."
               />
+              <p className="text-[11px] text-muted-foreground">
+                Variabel: <code className="text-pink-primary">{'{nama}'}</code>, <code className="text-pink-primary">{'{namaLengkap}'}</code>, <code className="text-pink-primary">{'{eventJudul}'}</code>, <code className="text-pink-primary">{'{eventTanggal}'}</code>, <code className="text-pink-primary">{'{eventLokasi}'}</code>, <code className="text-pink-primary">{'{jumlahOrang}'}</code>, <code className="text-pink-primary">{'{totalBayar}'}</code>, <code className="text-pink-primary">{'{kodeReferensi}'}</code>, <code className="text-pink-primary">{'{shareUrl}'}</code>
+              </p>
             </div>
 
             {/* Recipient List */}
