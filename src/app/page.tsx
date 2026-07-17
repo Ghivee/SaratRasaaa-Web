@@ -19,12 +19,16 @@ export const dynamic = "force-dynamic";
  *    admin token into the AdminPanel (never hardcoded in the bundle).
  */
 export default async function Home() {
-  const event = await db.event.findFirst({
-    where: { status: "active" },
-  });
-
   let activeEvent: ActiveEventSummary | null = null;
-  if (event) {
+  let testimonis: any[] = [];
+  let dbStatus: "ok" | "error" = "ok";
+
+  try {
+    const event = await db.event.findFirst({
+      where: { status: "active" },
+    });
+
+    if (event) {
     const agg = await db.pendaftar.aggregate({
       _sum: { jumlahOrang: true },
       where: {
@@ -49,15 +53,19 @@ export default async function Home() {
     };
   }
 
-  const testimonisRaw = await db.testimoni.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
-  
-  const testimonis = testimonisRaw.map(t => ({
-    ...t,
-    createdAt: t.createdAt.toISOString()
-  }));
+    const testimonisRaw = await db.testimoni.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    
+    testimonis = testimonisRaw.map((t) => ({
+      ...t,
+      createdAt: t.createdAt.toISOString(),
+    }));
+  } catch (error) {
+    console.error("Database connection error (likely Supabase paused):", error);
+    dbStatus = "error";
+  }
 
   return (
     <Suspense
@@ -70,7 +78,11 @@ export default async function Home() {
         </div>
       }
     >
-      <HomeClient initialActiveEvent={activeEvent} initialTestimonis={testimonis} />
+      <HomeClient 
+        initialActiveEvent={activeEvent} 
+        initialTestimonis={testimonis} 
+        dbStatus={dbStatus} 
+      />
     </Suspense>
   );
 }

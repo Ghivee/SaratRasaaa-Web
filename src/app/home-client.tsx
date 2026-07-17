@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Navbar } from "@/components/saratrasa/Navbar";
 import { Hero } from "@/components/saratrasa/Hero";
@@ -32,7 +33,15 @@ import type { ActiveEventSummary, HistoryEvent, View, GalleryItem } from "@/comp
  * - If `admin` secret verifies server-side → render AdminPanel (layer 1 of admin auth).
  * - Otherwise → render the public app with 3 in-page views.
  */
-export default function HomeClient({ initialActiveEvent = null, initialTestimonis = [] }: { initialActiveEvent?: ActiveEventSummary | null, initialTestimonis?: any[] }) {
+export default function HomeClient({ 
+  initialActiveEvent = null, 
+  initialTestimonis = [],
+  dbStatus = "ok"
+}: { 
+  initialActiveEvent?: ActiveEventSummary | null, 
+  initialTestimonis?: any[],
+  dbStatus?: "ok" | "error"
+}) {
   const searchParams = useSearchParams();
   const adminSecret = searchParams.get("admin") || undefined;
   const initialKode = searchParams.get("kode") || undefined;
@@ -58,6 +67,15 @@ export default function HomeClient({ initialActiveEvent = null, initialTestimoni
       cancelled = true;
     };
   }, [adminSecret]);
+
+  useEffect(() => {
+    if (dbStatus === "error") {
+      toast.warning(
+        "Sistem sedang dalam proses pemeliharaan atau optimalisasi. Beberapa data mungkin belum tersedia saat ini.", 
+        { duration: 8000 }
+      );
+    }
+  }, [dbStatus]);
 
   if (adminSecret && adminUrlOk === null) {
     return (

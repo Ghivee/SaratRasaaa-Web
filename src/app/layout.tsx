@@ -30,18 +30,35 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SaratRasaaa",
-  description: "Platform kegiatan sosial dan kerelawanan.",
+  title: "SaratRasaaa - Platform Kegiatan Sosial & Kerelawanan",
+  description: "Bergabunglah dengan SaratRasaaa, platform kegiatan sosial dan kerelawanan terdepan. Temukan event inspiratif, jadilah relawan, dan berkontribusi untuk masyarakat.",
   keywords: [
     "Saratrasaa",
     "volunteer",
     "komunitas",
     "relawan",
-    "event",
+    "event sosial",
     "pendaftaran",
-    "QRIS",
+    "kegiatan sosial",
+    "donasi",
   ],
   authors: [{ name: "Saratrasaa" }],
+  openGraph: {
+    title: "SaratRasaaa - Berkontribusi untuk Kebaikan",
+    description: "Wadah berkumpulnya relawan dan acara sosial inspiratif. Jadilah bagian dari perubahan bersama SaratRasaaa.",
+    url: "https://saratrasa.vercel.app",
+    siteName: "SaratRasaaa",
+    images: [
+      {
+        url: "/icons/icon-512x512.png",
+        width: 512,
+        height: 512,
+        alt: "SaratRasaaa Logo",
+      },
+    ],
+    locale: "id_ID",
+    type: "website",
+  },
   // PWA manifest + apple touch icon — the manifest makes the app installable
   // on Android/Chrome/Edge; the apple-touch-icon is the fallback iOS uses for
   // "Add to Home Screen". theme_color matches the Saratrasaa pink so the
