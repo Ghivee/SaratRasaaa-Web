@@ -216,21 +216,6 @@ export function Hero({ activeEvent, onDaftar }: HeroProps) {
           transition={{ duration: 0.5 }}
           className="flex flex-col gap-4 sm:gap-5"
         >
-          {/* Badge with shimmer effect */}
-          <div className="inline-flex w-fit items-center gap-2 rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium text-foreground relative overflow-hidden">
-            <Sparkles className="size-3.5 text-primary" aria-hidden />
-            Komunitas Volunteer Muda
-            {/* Shimmer overlay — a gradient that slides across the badge */}
-            <span
-              aria-hidden
-              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent"
-              style={{
-                backgroundSize: '200% 100%',
-                animation: 'shimmer 3s ease-in-out infinite',
-              }}
-            />
-          </div>
-
           <h1
             className="font-display font-bold leading-[1.1] tracking-tight text-foreground"
             style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}

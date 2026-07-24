@@ -33,14 +33,9 @@ export function Footer({ onNavigate }: FooterProps) {
           {/* Column 1 — Brand */}
           <div className="flex flex-col gap-3 md:col-span-1">
             <span className="font-display text-xl font-bold tracking-tight">
-              <span
-                aria-hidden
-                className="mr-0.5 inline-block size-2 translate-y-[1px] rounded-full bg-primary align-middle"
-              />
               Saratrasaa
             </span>
             <p className="max-w-xs text-sm leading-relaxed text-background/70">
-              Komunitas volunteer muda.{" "}
               <span className="inline-flex items-center gap-1 text-background/90">
                 Kebaikan, satu aksi pada satu waktu
                 <Heart
@@ -97,10 +92,10 @@ export function Footer({ onNavigate }: FooterProps) {
             </ul>
           </div>
 
-          {/* Column 3 — Terhubung */}
+          {/* Column 3 — Sosial Media */}
           <div className="flex flex-col gap-3">
             <h3 className="font-display text-sm font-bold uppercase tracking-wide text-background/80">
-              Terhubung
+              Sosial Media
             </h3>
             <ul className="flex flex-col gap-3">
               <li>
@@ -166,9 +161,7 @@ export function Footer({ onNavigate }: FooterProps) {
         <div className="mt-10 flex flex-col items-center gap-4 pt-6 sm:flex-row sm:justify-between">
           {/* Footer content */}
           <p className="inline-flex items-center gap-1.5 text-xs text-background/70">
-            © 2025 Saratrasaa. Dibuat dengan
-            <Heart className="size-3 fill-primary text-primary" aria-hidden />
-            oleh relawan, untuk relawan.
+            © 2025 Saratrasaa.
           </p>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-background/10 px-2.5 py-0.5 font-mono text-[11px] text-background/50">
             v1.0
