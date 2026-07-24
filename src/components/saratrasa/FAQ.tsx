@@ -39,7 +39,7 @@ const FAQS: FaqItem[] = [
     a: "Tiket QR berfungsi sebagai bukti pendaftaran. Tim panitia akan mencocokkan kode referensi kamu di lokasi. Simpan tiket di HP atau screenshot.",
   },
   {
-    q: "Bisa membatalkan pendaftaran?",
+    q: "Apakah bisa membatalkan pendaftaran?",
     a: "Pembayaran yang sudah masuk tidak bisa di-refund. Tapi kalau belum transfer, kamu bisa abaikan saja karena pendaftaran yang statusnya 'menunggu pembayaran' lebih dari 3 hari akan otomatis dibersihkan.",
   },
 ];

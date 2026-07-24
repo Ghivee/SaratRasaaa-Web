@@ -163,9 +163,6 @@ export function Footer({ onNavigate }: FooterProps) {
           <p className="inline-flex items-center gap-1.5 text-xs text-background/70">
             © 2025 Saratrasaa.
           </p>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-background/10 px-2.5 py-0.5 font-mono text-[11px] text-background/50">
-            v1.0
-          </span>
         </div>
       </div>
     </footer>
